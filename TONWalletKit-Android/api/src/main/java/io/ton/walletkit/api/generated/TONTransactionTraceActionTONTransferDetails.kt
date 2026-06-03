@@ -29,7 +29,6 @@
 package io.ton.walletkit.api.generated
 
 import io.ton.walletkit.model.TONUserFriendlyAddress
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -46,10 +45,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONTransactionTraceActionTONTransferDetails(
 
-    @Contextual @SerialName(value = "source")
+    @SerialName(value = "source")
     val source: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "destination")
+    @SerialName(value = "destination")
     val destination: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     @SerialName(value = "value")

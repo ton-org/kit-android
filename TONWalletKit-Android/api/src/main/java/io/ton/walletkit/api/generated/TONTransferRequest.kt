@@ -51,7 +51,7 @@ data class TONTransferRequest(
     @SerialName(value = "transferAmount")
     val transferAmount: kotlin.String,
 
-    @Contextual @SerialName(value = "recipientAddress")
+    @SerialName(value = "recipientAddress")
     val recipientAddress: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     @SerialName(value = "mode")

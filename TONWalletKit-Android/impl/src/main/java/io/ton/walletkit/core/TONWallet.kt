@@ -24,6 +24,7 @@ package io.ton.walletkit.core
 import io.ton.walletkit.ITONWallet
 import io.ton.walletkit.WalletKitBridgeException
 import io.ton.walletkit.api.generated.*
+import io.ton.walletkit.client.TONAPIClient
 import io.ton.walletkit.engine.WalletKitEngine
 import io.ton.walletkit.engine.model.WalletAccount
 import io.ton.walletkit.model.KeyPair
@@ -59,11 +60,18 @@ import kotlinx.serialization.json.Json
 internal class TONWallet internal constructor(
     override val id: String,
     override val address: TONUserFriendlyAddress,
+    private val network: TONNetwork,
     private val engine: WalletKitEngine,
     private val account: WalletAccount,
 ) : ITONWallet {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    override val client: TONAPIClient = BridgedJSAPIClient(
+        walletId = id,
+        engine = engine,
+        network = network,
+    )
     companion object {
         /**
          * Convert a mnemonic phrase to a key pair.
@@ -137,69 +145,25 @@ internal class TONWallet internal constructor(
      * @return Transaction request ready for sending or preview
      * @throws WalletKitBridgeException if transaction creation fails
      */
-    override suspend fun transferTONTransaction(request: TONTransferRequest): TONTransactionRequest {
-        val transactionContent = engine.createTransferTonTransaction(id, request)
-        return json.decodeFromString<TONTransactionRequest>(transactionContent)
-    }
+    override suspend fun transferTONTransaction(request: TONTransferRequest): TONTransactionRequest =
+        engine.createTransferTonTransaction(id, request)
 
-    /**
-     * Create a multi-recipient TON transfer transaction.
-     *
-     * @param requests List of transfer requests
-     * @return Transaction request ready for sending or preview
-     * @throws WalletKitBridgeException if transaction creation fails
-     */
-    override suspend fun transferTONTransaction(requests: List<TONTransferRequest>): TONTransactionRequest {
-        val transactionContent = engine.createTransferMultiTonTransaction(id, requests)
-        return json.decodeFromString<TONTransactionRequest>(transactionContent)
-    }
+    override suspend fun transferTONTransaction(requests: List<TONTransferRequest>): TONTransactionRequest =
+        engine.createTransferMultiTonTransaction(id, requests)
 
-    /**
-     * Send a transaction to the blockchain.
-     *
-     * @param transactionRequest Transaction request from transferTON/NFT/Jetton methods
-     * @throws WalletKitBridgeException if sending fails
-     */
-    override suspend fun send(transactionRequest: TONTransactionRequest) {
-        val transactionContent = json.encodeToString(TONTransactionRequest.serializer(), transactionRequest)
-        engine.sendTransaction(id, transactionContent)
-    }
+    override suspend fun send(transactionRequest: TONTransactionRequest): TONSendTransactionResponse =
+        engine.sendTransaction(id, transactionRequest)
 
-    /**
-     * Get transaction preview with fee estimation.
-     *
-     * @param transactionRequest Transaction request to preview
-     * @return Preview with estimated fees and trace
-     * @throws WalletKitBridgeException if preview generation fails
-     */
-    override suspend fun preview(transactionRequest: TONTransactionRequest): TONTransactionEmulatedPreview {
-        val transactionContent = json.encodeToString(TONTransactionRequest.serializer(), transactionRequest)
-        return engine.getTransactionPreview(id, transactionContent)
-    }
+    override suspend fun preview(
+        transactionRequest: TONTransactionRequest,
+        options: TONTransactionPreviewOptions?,
+    ): TONTransactionEmulatedPreview = engine.getTransactionPreview(id, transactionRequest, options)
 
-    /**
-     * Create an NFT transfer transaction.
-     *
-     * @param request NFT transfer request with recipient and optional comment
-     * @return Transaction request ready for sending or preview
-     * @throws WalletKitBridgeException if transaction creation fails
-     */
-    override suspend fun transferNFTTransaction(request: TONNFTTransferRequest): TONTransactionRequest {
-        val transactionContent = engine.createTransferNftTransaction(id, request)
-        return json.decodeFromString<TONTransactionRequest>(transactionContent)
-    }
+    override suspend fun transferNFTTransaction(request: TONNFTTransferRequest): TONTransactionRequest =
+        engine.createTransferNftTransaction(id, request)
 
-    /**
-     * Create an NFT transfer transaction with raw parameters.
-     *
-     * @param request Raw NFT transfer request with full control
-     * @return Transaction request ready for sending or preview
-     * @throws WalletKitBridgeException if transaction creation fails
-     */
-    override suspend fun transferNFTTransaction(request: TONNFTRawTransferRequest): TONTransactionRequest {
-        val transactionContent = engine.createTransferNftRawTransaction(id, request)
-        return json.decodeFromString<TONTransactionRequest>(transactionContent)
-    }
+    override suspend fun transferNFTTransaction(request: TONNFTRawTransferRequest): TONTransactionRequest =
+        engine.createTransferNftRawTransaction(id, request)
 
     /**
      * Get NFTs owned by this wallet.
@@ -257,10 +221,8 @@ internal class TONWallet internal constructor(
      * @return Transaction request ready for sending or preview
      * @throws WalletKitBridgeException if transaction creation fails
      */
-    override suspend fun transferJettonTransaction(request: TONJettonsTransferRequest): TONTransactionRequest {
-        val transactionContent = engine.createTransferJettonTransaction(id, request)
-        return json.decodeFromString<TONTransactionRequest>(transactionContent)
-    }
+    override suspend fun transferJettonTransaction(request: TONJettonsTransferRequest): TONTransactionRequest =
+        engine.createTransferJettonTransaction(id, request)
 
     /**
      * Get jettons owned by this wallet.

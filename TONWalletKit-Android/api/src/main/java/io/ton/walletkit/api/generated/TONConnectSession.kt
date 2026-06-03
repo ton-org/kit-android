@@ -29,7 +29,6 @@
 package io.ton.walletkit.api.generated
 
 import io.ton.walletkit.model.TONUserFriendlyAddress
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -37,7 +36,7 @@ import kotlinx.serialization.Serializable
  *
  *
  * @param sessionId
- * @param walletId Wallet ID - unique identifier for a wallet, should be different for similar wallets on different networks
+ * @param walletId
  * @param walletAddress
  * @param createdAt
  * @param lastActivityAt
@@ -57,11 +56,10 @@ data class TONConnectSession(
     @SerialName(value = "sessionId")
     val sessionId: kotlin.String,
 
-    /* Wallet ID - unique identifier for a wallet, should be different for similar wallets on different networks */
     @SerialName(value = "walletId")
     val walletId: kotlin.String,
 
-    @Contextual @SerialName(value = "walletAddress")
+    @SerialName(value = "walletAddress")
     val walletAddress: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     @SerialName(value = "createdAt")
@@ -80,7 +78,7 @@ data class TONConnectSession(
     val domain: kotlin.String,
 
     @SerialName(value = "schemaVersion")
-    val schemaVersion: kotlin.Int,
+    val schemaVersion: kotlin.Double,
 
     /* Display name of the dApp */
     @SerialName(value = "dAppName")

@@ -51,13 +51,13 @@ data class TONTransactionTraceMoneyFlowItem(
     @SerialName(value = "amount")
     val amount: kotlin.String,
 
-    @Contextual @SerialName(value = "tokenAddress")
+    @SerialName(value = "tokenAddress")
     val tokenAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "fromAddress")
+    @SerialName(value = "fromAddress")
     val fromAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "toAddress")
+    @SerialName(value = "toAddress")
     val toAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
 ) {

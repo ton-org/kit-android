@@ -49,7 +49,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONNFTCollection(
 
-    @Contextual @SerialName(value = "address")
+    @SerialName(value = "address")
     val address: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     /* The name of the NFT collection */
@@ -73,7 +73,7 @@ data class TONNFTCollection(
     @Contextual @SerialName(value = "dataHash")
     val dataHash: io.ton.walletkit.model.TONHex? = null,
 
-    @Contextual @SerialName(value = "ownerAddress")
+    @SerialName(value = "ownerAddress")
     val ownerAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     /* Additional arbitrary data related to the NFT collection */

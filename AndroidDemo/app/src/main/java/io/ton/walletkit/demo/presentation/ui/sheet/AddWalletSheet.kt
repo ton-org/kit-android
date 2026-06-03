@@ -29,15 +29,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -53,7 +48,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,10 +62,12 @@ import androidx.compose.ui.unit.dp
 import io.ton.walletkit.api.ChainIds
 import io.ton.walletkit.api.MAINNET
 import io.ton.walletkit.api.TESTNET
+import io.ton.walletkit.api.TETRA
 import io.ton.walletkit.api.WalletVersions
 import io.ton.walletkit.api.generated.TONNetwork
 import io.ton.walletkit.demo.R
 import io.ton.walletkit.demo.domain.model.WalletInterfaceType
+import io.ton.walletkit.demo.presentation.ui.icons.ContentPaste
 import io.ton.walletkit.demo.presentation.util.TestTags
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -89,29 +85,31 @@ fun AddWalletSheet(
     var network by remember { mutableStateOf(TONNetwork.MAINNET) }
     var walletVersion by rememberSaveable { mutableStateOf(DEFAULT_WALLET_VERSION) }
     var interfaceType by rememberSaveable { mutableStateOf(WalletInterfaceType.MNEMONIC) }
-    val mnemonicWords = remember { mutableStateListOf(*Array(24) { "" }) }
+    // Per-slot MutableState instead of a single SnapshotStateList<String>. A list would
+    // invalidate every reader on any mutation — with 24 TextFields that means one keystroke
+    // triggers 24 recompositions and 24 layout measures. Per-slot state keeps writes local:
+    // typing in field 5 only recomposes field 5.
+    val mnemonicWords = remember {
+        Array(MNEMONIC_WORD_COUNT) { mutableStateOf("") }
+    }
     var secretKeyHex by rememberSaveable { mutableStateOf("") }
     var pasteField by rememberSaveable { mutableStateOf("") }
     val clipboardManager = LocalClipboardManager.current
 
-    // Function to parse pasted text into individual words
+    // Parse pasted text into the 24 word slots. Writes each slot once; the per-slot state
+    // means only fields whose value actually changed recompose.
     fun parseSeedPhrase(text: String) {
         val words = text
             .trim()
             .lowercase()
             .split(Regex("\\s+")) // Split by any whitespace (space, tab, newline)
             .filter { it.isNotBlank() }
-            .take(24) // Only take first 24 words
+            .take(MNEMONIC_WORD_COUNT)
 
-        // Clear existing words
-        for (i in mnemonicWords.indices) {
-            mnemonicWords[i] = ""
-        }
-
-        // Fill in the parsed words
-        words.forEachIndexed { index, word ->
-            if (index < 24) {
-                mnemonicWords[index] = word
+        for (i in 0 until MNEMONIC_WORD_COUNT) {
+            val next = words.getOrNull(i).orEmpty()
+            if (mnemonicWords[i].value != next) {
+                mnemonicWords[i].value = next
             }
         }
 
@@ -153,7 +151,7 @@ fun AddWalletSheet(
 
         Text(stringResource(R.string.label_network), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf(TONNetwork.MAINNET, TONNetwork.TESTNET).forEach { option ->
+            listOf(TONNetwork.MAINNET, TONNetwork.TESTNET, TONNetwork.TETRA).forEach { option ->
                 FilterChip(
                     selected = network == option,
                     onClick = { network = option },
@@ -162,6 +160,7 @@ fun AddWalletSheet(
                             when (option.chainId) {
                                 ChainIds.MAINNET -> stringResource(R.string.network_mainnet)
                                 ChainIds.TESTNET -> stringResource(R.string.network_testnet)
+                                ChainIds.TETRA -> stringResource(R.string.network_tetra)
                                 else -> "Unknown"
                             },
                         )
@@ -276,8 +275,10 @@ fun AddWalletSheet(
                             value = pasteField,
                             onValueChange = {
                                 pasteField = it
-                                // Auto-parse when text is pasted (contains multiple words)
-                                if (it.trim().split(Regex("\\s+")).size > 1) {
+                                // Auto-parse when text is pasted (contains multiple words).
+                                // Cheap whitespace check — avoid splitting + regex per keystroke;
+                                // parseSeedPhrase does the full parse only when whitespace appears.
+                                if (it.any(Char::isWhitespace)) {
                                     parseSeedPhrase(it)
                                 }
                             },
@@ -310,28 +311,36 @@ fun AddWalletSheet(
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
-
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            userScrollEnabled = false,
-                            modifier = Modifier.heightIn(max = 600.dp),
-                        ) {
-                            itemsIndexed(mnemonicWords) { index, word ->
-                                TextField(
-                                    value = word,
-                                    onValueChange = { mnemonicWords[index] = it.lowercase().trim() },
-                                    singleLine = true,
-                                    label = { Text("${index + 1}") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textStyle = MaterialTheme.typography.bodySmall,
-                                )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (rowIndex in 0 until MNEMONIC_WORD_COUNT / MNEMONIC_GRID_COLUMNS) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    for (colIndex in 0 until MNEMONIC_GRID_COLUMNS) {
+                                        val index = rowIndex * MNEMONIC_GRID_COLUMNS + colIndex
+                                        val wordState = mnemonicWords[index]
+                                        TextField(
+                                            value = wordState.value,
+                                            onValueChange = { wordState.value = it.lowercase().trim() },
+                                            singleLine = true,
+                                            label = { Text("${index + 1}") },
+                                            modifier = Modifier.weight(1f),
+                                            textStyle = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
-                            onClick = { onImportWallet(walletName, network, mnemonicWords.toList(), "", walletVersion, interfaceType) },
+                            onClick = {
+                                onImportWallet(
+                                    walletName,
+                                    network,
+                                    mnemonicWords.map { it.value },
+                                    "",
+                                    walletVersion,
+                                    interfaceType,
+                                )
+                            },
                             modifier = Modifier.fillMaxWidth().testTag(TestTags.IMPORT_WALLET_PROCESS_BUTTON),
                         ) { Text(stringResource(R.string.action_import_wallet)) }
                     }
@@ -346,33 +355,20 @@ fun AddWalletSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    // Show info message if Custom Signer or Secret Key is selected
-                    when (interfaceType) {
-                        WalletInterfaceType.SIGNER -> {
-                            Text(
-                                stringResource(R.string.wallet_error_signer_cannot_generate),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(vertical = 8.dp),
-                            )
-                        }
-                        WalletInterfaceType.SECRET_KEY -> {
-                            Text(
-                                stringResource(R.string.wallet_error_secret_key_cannot_generate),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(vertical = 8.dp),
-                            )
-                        }
-                        WalletInterfaceType.MNEMONIC -> {
-                            // No warning for mnemonic
-                        }
+                    // Show info message if Secret Key is selected
+                    if (interfaceType == WalletInterfaceType.SECRET_KEY) {
+                        Text(
+                            stringResource(R.string.wallet_error_secret_key_cannot_generate),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
                     }
 
                     Button(
                         onClick = { onGenerateWallet(walletName, network, walletVersion, interfaceType) },
                         modifier = Modifier.fillMaxWidth().testTag(TestTags.GENERATE_WALLET_PROCESS_BUTTON),
-                        enabled = interfaceType == WalletInterfaceType.MNEMONIC, // Only enable for Mnemonic
+                        enabled = interfaceType != WalletInterfaceType.SECRET_KEY,
                     ) { Text(stringResource(R.string.action_generate_wallet)) }
                 }
             }
@@ -388,6 +384,7 @@ private enum class AddWalletTab(@StringRes val labelRes: Int) {
 }
 
 private const val MNEMONIC_WORD_COUNT = 24
+private const val MNEMONIC_GRID_COLUMNS = 3
 private const val DEFAULT_WALLET_VERSION = WalletVersions.V5R1
 
 @Preview(showBackground = true)

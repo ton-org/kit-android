@@ -27,6 +27,7 @@ import io.ton.walletkit.demo.presentation.model.ConnectRequestUi
 import io.ton.walletkit.demo.presentation.model.JettonDetails
 import io.ton.walletkit.demo.presentation.model.JettonSummary
 import io.ton.walletkit.demo.presentation.model.SignDataRequestUi
+import io.ton.walletkit.demo.presentation.model.SignMessageRequestUi
 import io.ton.walletkit.demo.presentation.model.TransactionRequestUi
 import io.ton.walletkit.demo.presentation.model.WalletSummary
 
@@ -36,12 +37,14 @@ import io.ton.walletkit.demo.presentation.model.WalletSummary
  */
 interface WalletActions {
     fun onAddWalletClick()
+    fun onStartCreateWalletFlow()
     fun onUrlPromptClick()
     fun onOpenBrowser(url: String, injectTonConnect: Boolean = true)
     fun onRefresh()
     fun onDismissSheet()
     fun onWalletDetails(address: String)
     fun onSendFromWallet(address: String)
+    fun onStakeFromWallet(address: String)
     fun onDisconnectSession(sessionId: String)
     fun onToggleWalletSwitcher()
     fun onSwitchWallet(address: String)
@@ -62,6 +65,8 @@ interface WalletActions {
     fun onRejectTransaction(request: TransactionRequestUi)
     fun onApproveSignData(request: SignDataRequestUi)
     fun onRejectSignData(request: SignDataRequestUi)
+    fun onApproveSignMessage(request: SignMessageRequestUi)
+    fun onRejectSignMessage(request: SignMessageRequestUi)
     fun onConfirmSignerApproval()
     fun onCancelSignerApproval()
     fun onSendTransaction(walletAddress: String, recipient: String, amount: String, comment: String)
@@ -74,4 +79,5 @@ interface WalletActions {
     fun onShowTransferJetton(jetton: JettonDetails)
     fun onLoadMoreJettons()
     fun onRefreshJettons()
+    fun onSwapClick()
 }

@@ -29,7 +29,6 @@
 package io.ton.walletkit.api.generated
 
 import io.ton.walletkit.model.TONUserFriendlyAddress
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -46,19 +45,19 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONTransactionTraceActionJettonTransfer(
 
-    @Contextual @SerialName(value = "asset")
+    @SerialName(value = "asset")
     val asset: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "source")
+    @SerialName(value = "source")
     val source: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "destination")
+    @SerialName(value = "destination")
     val destination: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "sourceJettonWallet")
+    @SerialName(value = "sourceJettonWallet")
     val sourceJettonWallet: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "destinationJettonWallet")
+    @SerialName(value = "destinationJettonWallet")
     val destinationJettonWallet: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     @SerialName(value = "amount")

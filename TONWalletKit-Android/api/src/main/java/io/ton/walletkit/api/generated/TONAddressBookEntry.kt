@@ -29,7 +29,6 @@
 package io.ton.walletkit.api.generated
 
 import io.ton.walletkit.model.TONUserFriendlyAddress
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -47,7 +46,7 @@ data class TONAddressBookEntry(
     @SerialName(value = "interfaces")
     val interfaces: kotlin.collections.List<kotlin.String>,
 
-    @Contextual @SerialName(value = "address")
+    @SerialName(value = "address")
     val address: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     /* The domain name associated with the address if available */

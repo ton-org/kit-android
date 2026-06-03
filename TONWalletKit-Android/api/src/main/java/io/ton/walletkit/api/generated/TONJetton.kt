@@ -48,10 +48,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONJetton(
 
-    @Contextual @SerialName(value = "address")
+    @SerialName(value = "address")
     val address: io.ton.walletkit.model.TONUserFriendlyAddress,
 
-    @Contextual @SerialName(value = "walletAddress")
+    @SerialName(value = "walletAddress")
     val walletAddress: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     @SerialName(value = "balance")

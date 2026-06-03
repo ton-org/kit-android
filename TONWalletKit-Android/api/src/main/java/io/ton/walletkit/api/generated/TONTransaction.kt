@@ -60,7 +60,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONTransaction(
 
-    @Contextual @SerialName(value = "account")
+    @SerialName(value = "account")
     val account: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     @Contextual @SerialName(value = "hash")
@@ -71,7 +71,7 @@ data class TONTransaction(
 
     /* Unix timestamp of the transaction */
     @SerialName(value = "now")
-    val now: kotlin.Int,
+    val now: kotlin.Double,
 
     /* Masterchain block sequence number */
     @SerialName(value = "mcBlockSeqno")
@@ -89,10 +89,10 @@ data class TONTransaction(
     val isEmulated: kotlin.Boolean,
 
     @SerialName(value = "accountStateBefore")
-    val accountStateBefore: TONAccountState? = null,
+    val accountStateBefore: TONTransactionAccountState? = null,
 
     @SerialName(value = "accountStateAfter")
-    val accountStateAfter: TONAccountState? = null,
+    val accountStateAfter: TONTransactionAccountState? = null,
 
     @SerialName(value = "description")
     val description: TONTransactionDescription? = null,
@@ -108,10 +108,10 @@ data class TONTransaction(
     @SerialName(value = "previousTransactionLogicalTime")
     val previousTransactionLogicalTime: kotlin.String? = null,
 
-    @SerialName(value = "origStatus")
+    @Contextual @SerialName(value = "origStatus")
     val origStatus: TONAccountStatus? = null,
 
-    @SerialName(value = "endStatus")
+    @Contextual @SerialName(value = "endStatus")
     val endStatus: TONAccountStatus? = null,
 
     @SerialName(value = "totalFees")

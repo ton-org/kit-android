@@ -50,13 +50,13 @@ data class TONNFTRawTransferRequestMessage(
     @SerialName(value = "queryId")
     val queryId: kotlin.String,
 
-    @Contextual @SerialName(value = "newOwner")
+    @SerialName(value = "newOwner")
     val newOwner: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     @SerialName(value = "forwardAmount")
     val forwardAmount: kotlin.String,
 
-    @Contextual @SerialName(value = "responseDestination")
+    @SerialName(value = "responseDestination")
     val responseDestination: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     @Contextual @SerialName(value = "customPayload")

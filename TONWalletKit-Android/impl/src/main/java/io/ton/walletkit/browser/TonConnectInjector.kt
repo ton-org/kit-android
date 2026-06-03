@@ -25,6 +25,7 @@ import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -33,6 +34,9 @@ import androidx.webkit.WebViewFeature
 import io.ton.walletkit.ITONWalletKit
 import io.ton.walletkit.WebViewTonConnectInjector
 import io.ton.walletkit.bridge.BuildConfig
+import io.ton.walletkit.bridge.optJsonArray
+import io.ton.walletkit.bridge.optJsonObject
+import io.ton.walletkit.bridge.optString
 import io.ton.walletkit.config.TONWalletKitConfiguration
 import io.ton.walletkit.core.TONWalletKit
 import io.ton.walletkit.engine.WalletKitEngine
@@ -48,8 +52,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
@@ -154,7 +159,7 @@ internal class TonConnectInjector(
          * Used when sessionId is not available (e.g., wallet-initiated disconnect).
          */
         @JvmStatic
-        internal fun broadcastEventToAllWebViews(event: JSONObject) {
+        internal fun broadcastEventToAllWebViews(event: JsonObject) {
             cleanupStaleReferences()
 
             val webViews = activeWebViews.values.mapNotNull { it.get() }.distinct()
@@ -193,7 +198,6 @@ internal class TonConnectInjector(
     @SuppressLint("SetJavaScriptEnabled")
     override fun setup() {
         // Add JavaScript interface for bridge communication
-        // Store reference so we can call storeResponse() later
         bridgeInterface = BridgeInterface(
             onMessage = { json, type -> handleBridgeMessage(json, type) },
             onError = { error -> Logger.e(TAG, "Bridge error: $error") },
@@ -208,12 +212,12 @@ internal class TonConnectInjector(
         scope.launch {
             try {
                 val sessions = engine?.callBridgeMethod(BridgeMethodConstants.METHOD_LIST_SESSIONS, null)
-                if (sessions is JSONObject && sessions.has(ResponseConstants.KEY_ITEMS)) {
-                    val items = sessions.getJSONArray(ResponseConstants.KEY_ITEMS)
-                    for (i in 0 until items.length()) {
-                        val session = items.getJSONObject(i)
+                val items = sessions?.optJsonArray(ResponseConstants.KEY_ITEMS)
+                if (items != null) {
+                    for (item in items) {
+                        val session = item as? JsonObject ?: continue
                         val sessionId = session.optString(ResponseConstants.KEY_SESSION_ID)
-                        if (!sessionId.isNullOrEmpty()) {
+                        if (sessionId.isNotEmpty()) {
                             registerWebView(sessionId, webView)
                         }
                     }
@@ -225,7 +229,6 @@ internal class TonConnectInjector(
 
         // CRITICAL: Use WebViewCompat.addDocumentStartJavaScript for early injection
         // This is the proper Android API to inject JavaScript before HTML parsing begins
-        // (similar to iOS WKUserScript with injectionTime = .atDocumentStart)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             try {
                 // Load inject.mjs from assets
@@ -269,9 +272,7 @@ internal class TonConnectInjector(
                         try {
                             engine?.callBridgeMethod(
                                 method = BridgeMethodConstants.METHOD_EMIT_BROWSER_PAGE_STARTED,
-                                params = JSONObject().apply {
-                                    put(ResponseConstants.KEY_URL, it)
-                                },
+                                params = buildJsonObject { put(ResponseConstants.KEY_URL, it) },
                             )
                         } catch (e: Exception) {
                             Logger.w(TAG, "Failed to emit page started event", e)
@@ -287,9 +288,7 @@ internal class TonConnectInjector(
                         try {
                             engine?.callBridgeMethod(
                                 method = BridgeMethodConstants.METHOD_EMIT_BROWSER_PAGE_FINISHED,
-                                params = JSONObject().apply {
-                                    put(ResponseConstants.KEY_URL, it)
-                                },
+                                params = buildJsonObject { put(ResponseConstants.KEY_URL, it) },
                             )
                         } catch (e: Exception) {
                             Logger.w(TAG, "Failed to emit page finished event", e)
@@ -301,7 +300,7 @@ internal class TonConnectInjector(
             override fun onReceivedError(
                 view: WebView?,
                 request: WebResourceRequest?,
-                error: android.webkit.WebResourceError?,
+                error: WebResourceError?,
             ) {
                 super.onReceivedError(view, request, error)
                 val errorMessage = error?.description?.toString() ?: "Unknown error"
@@ -311,9 +310,7 @@ internal class TonConnectInjector(
                     try {
                         engine?.callBridgeMethod(
                             method = BridgeMethodConstants.METHOD_EMIT_BROWSER_ERROR,
-                            params = JSONObject().apply {
-                                put(ResponseConstants.KEY_MESSAGE, errorMessage)
-                            },
+                            params = buildJsonObject { put(ResponseConstants.KEY_MESSAGE, errorMessage) },
                         )
                     } catch (e: Exception) {
                         Logger.w(TAG, "Failed to emit error event", e)
@@ -339,7 +336,7 @@ internal class TonConnectInjector(
      * @param messageId The ID from the original request
      * @param response The response data to send back
      */
-    fun sendResponse(messageId: String, response: JSONObject) {
+    fun sendResponse(messageId: String, response: JsonObject) {
         val pending = pendingRequests.remove(messageId)
         if (pending == null) {
             Logger.w(TAG, "No pending request found for messageId: $messageId")
@@ -350,7 +347,7 @@ internal class TonConnectInjector(
         // We need to register with BOTH messageId AND sessionId because:
         // - Responses are tagged with messageId (from the original request)
         // - Events (like disconnect) are tagged with sessionId (from the wallet)
-        if (pending.method == BrowserConstants.EVENT_CONNECT && response.has(ResponseConstants.KEY_PAYLOAD)) {
+        if (pending.method == BrowserConstants.EVENT_CONNECT && ResponseConstants.KEY_PAYLOAD in response) {
             try {
                 // Register with messageId (for immediate responses)
                 registerWebView(messageId, webView)
@@ -364,20 +361,14 @@ internal class TonConnectInjector(
 
                         // Find the session that was just created for this messageId
                         // The wallet should have created a session during the connect processing
-                        if (sessions is JSONObject && sessions.has(ResponseConstants.KEY_ITEMS)) {
-                            val items = sessions.getJSONArray(ResponseConstants.KEY_ITEMS)
-
+                        val items = sessions?.optJsonArray(ResponseConstants.KEY_ITEMS)
+                        if (items != null && items.isNotEmpty()) {
                             // The most recently created session should be ours
-                            // Register it with the WebView
-                            if (items.length() > 0) {
-                                // For now, register the LAST session (most recently created)
-                                // This is a heuristic but should work for the common case
-                                val lastSession = items.getJSONObject(items.length() - 1)
-                                val sessionId = lastSession.optString(ResponseConstants.KEY_SESSION_ID)
-
-                                if (!sessionId.isNullOrEmpty() && sessionId != messageId) {
-                                    registerWebView(sessionId, webView)
-                                }
+                            // Register it with the WebView (heuristic: pick the last one)
+                            val lastSession = items.last() as? JsonObject ?: return@launch
+                            val sessionId = lastSession.optString(ResponseConstants.KEY_SESSION_ID)
+                            if (sessionId.isNotEmpty() && sessionId != messageId) {
+                                registerWebView(sessionId, webView)
                             }
                         }
                     } catch (e: Exception) {
@@ -399,30 +390,22 @@ internal class TonConnectInjector(
      *
      * @param event The event data to broadcast
      */
-    fun sendEvent(event: JSONObject) {
+    fun sendEvent(event: JsonObject) {
         // CRITICAL FIX: The event from Engine already has the correct structure:
         // { type: "TONCONNECT_BRIDGE_EVENT", source: "...", event: {...} }
         // Extract the inner event
-        val actualEvent = if (event.has(BrowserConstants.KEY_EVENT)) {
-            event.getJSONObject(BrowserConstants.KEY_EVENT)
-        } else {
-            event
-        }
+        val actualEvent = event.optJsonObject(BrowserConstants.KEY_EVENT) ?: event
 
         // Create the message structure for the event
-        val eventMessage = JSONObject().apply {
+        val eventMessage = buildJsonObject {
             put(BrowserConstants.KEY_TYPE, BrowserConstants.MESSAGE_TYPE_BRIDGE_EVENT)
             put(BrowserConstants.KEY_EVENT, actualEvent)
         }
 
-        // Store event in BridgeInterface - available to ALL frames via @JavascriptInterface
-        bridgeInterface.storeEvent(eventMessage.toString())
-
-        // Notify the main frame via JavaScript injection - main frame will broadcast to iframes via postMessage
         webView.post {
-            webView.evaluateJavascript(
-                "window.AndroidTonConnect && window.AndroidTonConnect.__notifyEvent();",
-                null,
+            webView.postWebMessage(
+                android.webkit.WebMessage(eventMessage.toString()),
+                android.net.Uri.EMPTY,
             )
         }
     }
@@ -460,7 +443,7 @@ internal class TonConnectInjector(
         pendingRequests.clear()
     }
 
-    private fun handleBridgeMessage(json: JSONObject, type: String) {
+    private fun handleBridgeMessage(json: JsonObject, type: String) {
         scope.launch {
             when (type) {
                 BrowserConstants.MESSAGE_TYPE_BRIDGE_REQUEST -> handleBridgeRequest(json)
@@ -469,7 +452,7 @@ internal class TonConnectInjector(
         }
     }
 
-    private fun handleBridgeRequest(json: JSONObject) {
+    private fun handleBridgeRequest(json: JsonObject) {
         val frameId = json.optString(BrowserConstants.KEY_FRAME_ID, BrowserConstants.DEFAULT_FRAME_ID)
         val messageId = json.optString(BrowserConstants.KEY_MESSAGE_ID)
         val method = json.optString(BrowserConstants.KEY_METHOD, BrowserConstants.DEFAULT_METHOD)
@@ -493,10 +476,10 @@ internal class TonConnectInjector(
         if (engine == null) {
             Logger.e(TAG, "WalletKit engine not available!")
             // Send error response back to dApp
-            val errorResponse = JSONObject().apply {
+            val errorResponse = buildJsonObject {
                 put(
                     ResponseConstants.KEY_ERROR,
-                    JSONObject().apply {
+                    buildJsonObject {
                         put(ResponseConstants.KEY_MESSAGE, ERROR_WALLET_ENGINE_NOT_INITIALIZED)
                         put(ResponseConstants.KEY_CODE, ERROR_CODE_INTERNAL)
                     },
@@ -511,7 +494,7 @@ internal class TonConnectInjector(
             try {
                 engine.callBridgeMethod(
                     method = BridgeMethodConstants.METHOD_EMIT_BROWSER_BRIDGE_REQUEST,
-                    params = JSONObject().apply {
+                    params = buildJsonObject {
                         put(BrowserConstants.KEY_MESSAGE_ID, messageId)
                         put(BrowserConstants.KEY_METHOD, method)
                         put(BrowserConstants.KEY_REQUEST, json.toString())
@@ -525,19 +508,9 @@ internal class TonConnectInjector(
         // Forward to TONWalletKit engine - it handles everything internally!
         scope.launch {
             try {
-                // Get params - can be JSONObject, JSONArray, or null
-                val paramsRaw = json.opt(ResponseConstants.KEY_PARAMS)
-
-                // Convert to JSON string for engine (engine will parse it properly)
-                val paramsJson: String? = when (paramsRaw) {
-                    is JSONObject -> paramsRaw.toString()
-                    is JSONArray -> paramsRaw.toString()
-                    null -> null
-                    else -> {
-                        Logger.w(TAG, "Unexpected params type: ${paramsRaw.javaClass.simpleName}")
-                        null
-                    }
-                }
+                // Params can be a JsonObject, a JsonArray, or absent. Send the raw JSON
+                // string so the engine can parse it back per the TonConnect method contract.
+                val paramsJson: String? = json[ResponseConstants.KEY_PARAMS]?.toString()
 
                 // Use WebView's current URL (the main frame URL) instead of tracking it manually
                 // This is more reliable than trying to detect page vs resource loads
@@ -556,10 +529,10 @@ internal class TonConnectInjector(
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to forward request to WalletKit engine", e)
                 // Send error response back to dApp
-                val errorResponse = JSONObject().apply {
+                val errorResponse = buildJsonObject {
                     put(
                         ResponseConstants.KEY_ERROR,
-                        JSONObject().apply {
+                        buildJsonObject {
                             put(ResponseConstants.KEY_MESSAGE, e.message ?: ERROR_FAILED_PROCESS_REQUEST)
                             put(ResponseConstants.KEY_CODE, ERROR_CODE_INTERNAL)
                         },
@@ -570,28 +543,23 @@ internal class TonConnectInjector(
         }
     }
 
-    private fun sendResponseToFrame(pending: PendingRequest, response: JSONObject) {
+    private fun sendResponseToFrame(pending: PendingRequest, response: JsonObject) {
         scope.launch(Dispatchers.Main) {
             deliverResponse(pending, response)
         }
     }
 
-    private fun deliverResponse(pending: PendingRequest, response: JSONObject) {
-        val responseJson = JSONObject().apply {
+    private fun deliverResponse(pending: PendingRequest, response: JsonObject) {
+        val responseJson = buildJsonObject {
             put(BrowserConstants.KEY_TYPE, BrowserConstants.MESSAGE_TYPE_BRIDGE_RESPONSE)
             put(BrowserConstants.KEY_MESSAGE_ID, pending.messageId)
             put(BrowserConstants.KEY_SUCCESS, true)
             put(BrowserConstants.KEY_PAYLOAD, response)
         }
 
-        // Store response in BridgeInterface - available to ALL frames via @JavascriptInterface
-        bridgeInterface.storeResponse(pending.messageId, responseJson.toString())
-
-        // Notify the main frame via JavaScript injection - main frame will broadcast to iframes via postMessage
-        val safeMessageId = Json.encodeToString(pending.messageId)
-        webView.evaluateJavascript(
-            "window.AndroidTonConnect && window.AndroidTonConnect.__notifyResponse($safeMessageId);",
-            null,
+        webView.postWebMessage(
+            android.webkit.WebMessage(responseJson.toString()),
+            android.net.Uri.EMPTY,
         )
     }
 

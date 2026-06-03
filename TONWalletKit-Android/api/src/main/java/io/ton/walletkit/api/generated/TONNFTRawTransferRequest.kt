@@ -29,7 +29,6 @@
 package io.ton.walletkit.api.generated
 
 import io.ton.walletkit.model.TONUserFriendlyAddress
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -43,7 +42,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONNFTRawTransferRequest(
 
-    @Contextual @SerialName(value = "nftAddress")
+    @SerialName(value = "nftAddress")
     val nftAddress: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     @SerialName(value = "transferAmount")

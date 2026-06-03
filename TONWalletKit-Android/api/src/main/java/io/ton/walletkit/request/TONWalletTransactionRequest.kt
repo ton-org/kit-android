@@ -25,39 +25,20 @@ import io.ton.walletkit.api.generated.TONSendTransactionApprovalResponse
 import io.ton.walletkit.api.generated.TONSendTransactionRequestEvent
 
 /**
- * Represents a transaction request from a dApp.
+ * A transaction request from a dApp.
  *
- * Mirrors iOS TONWalletTransactionRequest for cross-platform consistency.
- *
- * Handle this request by calling [approve] to execute the transaction
- * or [reject] to deny it.
- *
- * @property event The underlying transaction request event with all details
+ * When this request is the embedded follow-up of a connect-with-intent flow, [event] is the
+ * embedded variant (a subclass of [TONSendTransactionRequestEvent]); the bridge picks up the
+ * `connectionResult` field at serialization time so the JS side can finalise the session.
  */
 class TONWalletTransactionRequest(
     val event: TONSendTransactionRequestEvent,
     private val handler: RequestHandler,
 ) {
-    /**
-     * Approve this transaction request.
-     *
-     * @param response Optional pre-computed approval response. If provided, the SDK will use
-     *                 this response directly instead of signing the transaction internally.
-     * @throws io.ton.walletkit.WalletKitBridgeException if approval fails
-     */
-    suspend fun approve(
-        response: TONSendTransactionApprovalResponse? = null,
-    ) {
+    suspend fun approve(response: TONSendTransactionApprovalResponse? = null) {
         handler.approveTransaction(event, response)
     }
 
-    /**
-     * Reject this transaction request.
-     *
-     * @param reason Optional reason for rejection
-     * @param errorCode Optional error code for the TON Connect protocol
-     * @throws io.ton.walletkit.WalletKitBridgeException if rejection fails
-     */
     suspend fun reject(reason: String? = null, errorCode: Int? = null) {
         handler.rejectTransaction(event, reason, errorCode)
     }

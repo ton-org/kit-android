@@ -21,18 +21,20 @@
  */
 package io.ton.walletkit.config
 
+import io.ton.walletkit.api.generated.TONManifestFetchResult
 import io.ton.walletkit.api.generated.TONNetwork
 import io.ton.walletkit.client.TONAPIClient
 import io.ton.walletkit.internal.constants.JsonConsts
+import io.ton.walletkit.session.TONConnectSessionManager
 import io.ton.walletkit.storage.TONWalletKitStorageType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 /**
  * Configuration for TONWalletKit initialization.
  *
- * Mirrors the shared TON Wallet Kit configuration contract for cross-platform consistency.
- * Follows iOS SDK's structure with NetworkConfiguration for per-network settings.
+ * Uses NetworkConfiguration for per-network settings.
  *
  * @property networkConfigurations Set of network-specific configurations (each with either apiClientConfiguration OR apiClient)
  * @property deviceInfo Device and app information (optional, auto-detected if not provided)
@@ -49,20 +51,26 @@ data class TONWalletKitConfiguration(
     val walletManifest: Manifest,
     val bridge: Bridge,
     val features: List<Feature>,
-    @kotlinx.serialization.Transient
+    @Transient
     val storageType: TONWalletKitStorageType = TONWalletKitStorageType.Encrypted,
-    @kotlinx.serialization.Transient
+    @Transient
     val deviceInfo: DeviceInfo? = null,
     /**
      * Custom session manager implementation.
      * If not provided, a default storage-backed session manager will be used.
      */
-    @kotlinx.serialization.Transient
-    val sessionManager: io.ton.walletkit.session.TONConnectSessionManager? = null,
-    @kotlinx.serialization.Transient
+    @Transient
+    val sessionManager: TONConnectSessionManager? = null,
+    @Transient
     val dev: DevOptions? = null,
-    @kotlinx.serialization.Transient
+    @Transient
     val eventsConfiguration: EventsConfiguration? = null,
+    /**
+     * Optional callback that supplies a dApp's manifest by URL. When set, the SDK delegates
+     * manifest resolution to this lambda instead of issuing the built-in HTTPS fetch.
+     */
+    @Transient
+    val fetchManifest: (suspend (manifestUrl: String) -> TONManifestFetchResult)? = null,
 ) {
     /**
      * Returns the primary network (first in the set).
@@ -72,11 +80,14 @@ data class TONWalletKitConfiguration(
         get() = networkConfigurations.first().network
 
     /**
-     * Extracts all custom API clients from network configurations.
-     * Only includes networks that have a custom apiClient (not apiClientConfiguration).
+     * Extracts all custom API clients from network configurations, paired with the network
+     * they serve. Only includes networks that have a custom [TONAPIClient] (not
+     * `apiClientConfiguration`). The map is keyed by each configuration's declared network.
      */
-    val apiClients: List<TONAPIClient>
-        get() = networkConfigurations.mapNotNull { it.apiClient }
+    val apiClients: Map<TONNetwork, TONAPIClient>
+        get() = networkConfigurations
+            .mapNotNull { nc -> nc.apiClient?.let { nc.network to it } }
+            .toMap()
 
     /**
      * Returns the API client configuration for the primary network.
@@ -142,6 +153,24 @@ data class TONWalletKitConfiguration(
     )
 
     /**
+     * API client type for a network configuration.
+     */
+    @Serializable
+    enum class APIClientType {
+        @SerialName("default")
+        DEFAULT,
+
+        @SerialName("toncenter")
+        TONCENTER,
+
+        @SerialName("tonapi")
+        TONAPI,
+
+        @SerialName("custom")
+        CUSTOM,
+    }
+
+    /**
      * Network-specific configuration.
      *
      * Each network configuration can have either:
@@ -152,6 +181,7 @@ data class TONWalletKitConfiguration(
      *
      * @property network The blockchain network this configuration applies to
      * @property apiClientConfiguration Built-in API client configuration (optional, mutually exclusive with apiClient)
+     * @property apiClientType The type of built-in API client to create (default: [APIClientType.DEFAULT])
      * @property apiClient Custom API client implementation (optional, mutually exclusive with apiClientConfiguration)
      */
     @Serializable
@@ -159,7 +189,8 @@ data class TONWalletKitConfiguration(
         val network: TONNetwork,
         @SerialName("apiClient")
         val apiClientConfiguration: APIClientConfiguration? = null,
-        @kotlinx.serialization.Transient
+        val apiClientType: APIClientType = APIClientType.DEFAULT,
+        @Transient
         val apiClient: TONAPIClient? = null,
     ) {
         /**
@@ -173,12 +204,27 @@ data class TONWalletKitConfiguration(
         )
 
         /**
+         * Create a network configuration with an explicit API client type.
+         */
+        constructor(
+            network: TONNetwork,
+            apiClientConfiguration: APIClientConfiguration,
+            apiClientType: APIClientType,
+        ) : this(
+            network = network,
+            apiClientConfiguration = apiClientConfiguration,
+            apiClientType = apiClientType,
+            apiClient = null,
+        )
+
+        /**
          * Create a network configuration with a custom API client.
          * Use this when you want to provide your own API client implementation.
          */
         constructor(network: TONNetwork, apiClient: TONAPIClient) : this(
             network = network,
             apiClientConfiguration = null,
+            apiClientType = APIClientType.CUSTOM,
             apiClient = apiClient,
         )
 
@@ -236,8 +282,6 @@ data class TONWalletKitConfiguration(
 
 /**
  * Types of data that can be signed.
- *
- * Mirrors the shared TON Wallet Kit specification.
  */
 @Serializable
 enum class SignDataType {

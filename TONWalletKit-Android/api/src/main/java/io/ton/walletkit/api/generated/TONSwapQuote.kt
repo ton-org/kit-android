@@ -39,14 +39,13 @@ import kotlinx.serialization.Serializable
  * @param toToken
  * @param rawFromAmount
  * @param rawToAmount
- * @param fromAmount
- * @param toAmount
+ * @param fromAmount Amount of tokens to sell
+ * @param toAmount Amount of tokens to buy
  * @param rawMinReceived
- * @param minReceived
+ * @param minReceived Minimum amount of tokens to receive (after slippage)
  * @param network
  * @param providerId Identifier of the swap provider
  * @param priceImpact Price impact of the swap in basis points (100 = 1%)
- * @param fee Fees associated with the swap
  * @param expiresAt Unix timestamp in seconds when the quote expires
  * @param metadata Provider-specific metadata for the quote
  */
@@ -65,15 +64,18 @@ data class TONSwapQuote(
     @SerialName(value = "rawToAmount")
     val rawToAmount: kotlin.String,
 
+    /* Amount of tokens to sell */
     @SerialName(value = "fromAmount")
     val fromAmount: kotlin.String,
 
+    /* Amount of tokens to buy */
     @SerialName(value = "toAmount")
     val toAmount: kotlin.String,
 
     @SerialName(value = "rawMinReceived")
     val rawMinReceived: kotlin.String,
 
+    /* Minimum amount of tokens to receive (after slippage) */
     @SerialName(value = "minReceived")
     val minReceived: kotlin.String,
 
@@ -87,10 +89,6 @@ data class TONSwapQuote(
     /* Price impact of the swap in basis points (100 = 1%) */
     @SerialName(value = "priceImpact")
     val priceImpact: kotlin.Int? = null,
-
-    /* Fees associated with the swap */
-    @SerialName(value = "fee")
-    val fee: kotlin.collections.List<TONSwapFee>? = null,
 
     /* Unix timestamp in seconds when the quote expires */
     @SerialName(value = "expiresAt")

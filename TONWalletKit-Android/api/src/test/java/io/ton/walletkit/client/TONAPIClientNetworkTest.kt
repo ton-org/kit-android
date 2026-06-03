@@ -1,0 +1,135 @@
+/*
+ * Copyright (c) 2025 TonTech
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+package io.ton.walletkit.client
+
+import io.ton.walletkit.api.MAINNET
+import io.ton.walletkit.api.TESTNET
+import io.ton.walletkit.api.generated.TONAccountState
+import io.ton.walletkit.api.generated.TONEmulationResult
+import io.ton.walletkit.api.generated.TONGetMethodResult
+import io.ton.walletkit.api.generated.TONMasterchainInfo
+import io.ton.walletkit.api.generated.TONNFTsRequest
+import io.ton.walletkit.api.generated.TONNFTsResponse
+import io.ton.walletkit.api.generated.TONNetwork
+import io.ton.walletkit.api.generated.TONRawStackItem
+import io.ton.walletkit.api.generated.TONUserNFTsRequest
+import io.ton.walletkit.config.TONWalletKitConfiguration
+import io.ton.walletkit.model.TONBase64
+import io.ton.walletkit.model.TONTokenAmount
+import io.ton.walletkit.model.TONUserFriendlyAddress
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Test
+
+class TONAPIClientNetworkTest {
+
+    private class StubbedClient(private val net: TONNetwork) : TONAPIClient {
+        override fun network(): TONNetwork = net
+        override suspend fun sendBoc(boc: TONBase64): String = ""
+        override suspend fun runGetMethod(
+            address: TONUserFriendlyAddress,
+            method: String,
+            stack: List<TONRawStackItem>?,
+            seqno: UInt?,
+        ): TONGetMethodResult = error("not used")
+        override suspend fun getBalance(address: TONUserFriendlyAddress, seqno: UInt?): TONTokenAmount =
+            TONTokenAmount.ZERO
+        override suspend fun getMasterchainInfo(): TONMasterchainInfo = error("not used")
+        override suspend fun nftItemsByAddress(request: TONNFTsRequest): TONNFTsResponse = error("not used")
+        override suspend fun nftItemsByOwner(request: TONUserNFTsRequest): TONNFTsResponse = error("not used")
+        override suspend fun fetchEmulation(messageBoc: TONBase64, ignoreSignature: Boolean): TONEmulationResult =
+            error("not used")
+        override suspend fun accountState(address: TONUserFriendlyAddress, seqno: UInt?): TONAccountState =
+            error("not used")
+        override suspend fun accountStates(
+            addresses: List<TONUserFriendlyAddress>,
+        ): Map<TONUserFriendlyAddress, TONAccountState> = emptyMap()
+        override suspend fun resolveDnsWallet(domain: String): String? = null
+        override suspend fun backResolveDnsWallet(address: TONUserFriendlyAddress): String? = null
+    }
+
+    @Test
+    fun `client_network reports the configured network`() {
+        val client = StubbedClient(TONNetwork.MAINNET)
+        assertEquals(TONNetwork.MAINNET, client.network())
+    }
+
+    @Test
+    fun `NetworkConfiguration pairs a custom client with its network`() {
+        val client = StubbedClient(TONNetwork.MAINNET)
+        val nc = TONWalletKitConfiguration.NetworkConfiguration(
+            network = TONNetwork.MAINNET,
+            apiClient = client,
+        )
+
+        assertEquals(TONNetwork.MAINNET, nc.network)
+        assertNotNull(nc.apiClient)
+        assertEquals(TONNetwork.MAINNET, nc.apiClient?.network())
+    }
+
+    @Test
+    fun `NetworkConfiguration without custom client retains its network`() {
+        val nc = TONWalletKitConfiguration.NetworkConfiguration(
+            network = TONNetwork.MAINNET,
+            apiClientConfiguration = TONWalletKitConfiguration.APIClientConfiguration(key = "k"),
+        )
+
+        assertEquals(TONNetwork.MAINNET, nc.network)
+    }
+
+    @Test
+    fun `multiple networks each carry their own client pairing`() {
+        val mainnetClient = StubbedClient(TONNetwork.MAINNET)
+        val testnetClient = StubbedClient(TONNetwork.TESTNET)
+        val configs = listOf(
+            TONWalletKitConfiguration.NetworkConfiguration(
+                network = TONNetwork.MAINNET,
+                apiClient = mainnetClient,
+            ),
+            TONWalletKitConfiguration.NetworkConfiguration(
+                network = TONNetwork.TESTNET,
+                apiClient = testnetClient,
+            ),
+        )
+
+        val byMainnet = configs.firstOrNull { it.network == TONNetwork.MAINNET }?.apiClient
+        val byTestnet = configs.firstOrNull { it.network == TONNetwork.TESTNET }?.apiClient
+
+        assertEquals(mainnetClient, byMainnet)
+        assertEquals(testnetClient, byTestnet)
+        assertEquals(TONNetwork.MAINNET, byMainnet?.network())
+        assertEquals(TONNetwork.TESTNET, byTestnet?.network())
+    }
+
+    @Test
+    fun `network pairs can carry a custom chainId`() {
+        val custom = TONNetwork(chainId = "123456")
+        val nc = TONWalletKitConfiguration.NetworkConfiguration(
+            network = custom,
+            apiClient = StubbedClient(custom),
+        )
+
+        assertEquals(custom, nc.network)
+        assertEquals("123456", nc.network.chainId)
+        assertEquals(custom, nc.apiClient?.network())
+    }
+}

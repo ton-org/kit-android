@@ -34,12 +34,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONConnectSession(
     val sessionId: String,
-    /**
-     * Wallet ID format: "network:address"
-     * Examples:
-     * - "-239:EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2" (mainnet)
-     * - "-3:EQDtFpEwcFAEcRe5mLVh2N6C0x-_hJEM7W61_JLnSF74p4q2" (testnet)
-     */
     val walletId: String,
     val walletAddress: TONUserFriendlyAddress,
     val createdAt: String,

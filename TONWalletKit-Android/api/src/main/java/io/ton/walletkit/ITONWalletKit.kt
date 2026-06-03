@@ -22,8 +22,16 @@
 package io.ton.walletkit
 
 import android.content.Context
+import android.webkit.WebView
 import io.ton.walletkit.api.MAINNET
+import io.ton.walletkit.api.TONTonStakersProviderConfig
+import io.ton.walletkit.api.generated.TONDeDustSwapProviderConfig
 import io.ton.walletkit.api.generated.TONNetwork
+import io.ton.walletkit.api.generated.TONOmnistonSwapProviderConfig
+import io.ton.walletkit.api.generated.TONSignatureDomain
+import io.ton.walletkit.api.generated.TONTonApiStreamingProviderConfig
+import io.ton.walletkit.api.generated.TONTonCenterStreamingProviderConfig
+import io.ton.walletkit.api.generated.TONTransactionRequest
 import io.ton.walletkit.config.TONWalletKitConfiguration
 import io.ton.walletkit.internal.TONWalletKitFactory
 import io.ton.walletkit.listener.TONBridgeEventsHandler
@@ -32,6 +40,14 @@ import io.ton.walletkit.model.TONWalletAdapter
 import io.ton.walletkit.model.WalletSigner
 import io.ton.walletkit.model.WalletSignerInfo
 import io.ton.walletkit.request.TONWalletConnectionRequest
+import io.ton.walletkit.session.TONConnectSession
+import io.ton.walletkit.staking.ITONStakingManager
+import io.ton.walletkit.staking.tonstakers.TONTonStakersStakingProvider
+import io.ton.walletkit.streaming.ITONStreamingManager
+import io.ton.walletkit.streaming.ITONStreamingProvider
+import io.ton.walletkit.swap.ITONSwapManager
+import io.ton.walletkit.swap.dedust.TONDeDustSwapProvider
+import io.ton.walletkit.swap.omniston.TONOmnistonSwapProvider
 
 /**
  * TON Wallet Kit SDK for managing wallets and TON Connect.
@@ -66,7 +82,9 @@ interface ITONWalletKit {
     /**
      * Create a signer from a 32-byte secret key.
      */
-    suspend fun createSignerFromSecretKey(secretKey: ByteArray): WalletSignerInfo
+    suspend fun createSignerFromSecretKey(
+        secretKey: ByteArray,
+    ): WalletSignerInfo
 
     /**
      * Create a signer from a custom [WalletSigner] (e.g. hardware wallet).
@@ -77,22 +95,28 @@ interface ITONWalletKit {
 
     /**
      * Create a V5R1 wallet adapter.
+     *
+     * @param domain Optional signature domain for L2 chains (e.g. Tetra).
      */
     suspend fun createV5R1Adapter(
         signer: WalletSignerInfo,
         network: TONNetwork = TONNetwork.MAINNET,
         workchain: Int = WalletKitConstants.DEFAULT_WORKCHAIN,
         walletId: Long = WalletKitConstants.DEFAULT_WALLET_ID_V5R1,
+        domain: TONSignatureDomain? = null,
     ): TONWalletAdapter
 
     /**
      * Create a V4R2 wallet adapter.
+     *
+     * @param domain Optional signature domain for L2 chains (e.g. Tetra).
      */
     suspend fun createV4R2Adapter(
         signer: WalletSignerInfo,
         network: TONNetwork = TONNetwork.MAINNET,
         workchain: Int = WalletKitConstants.DEFAULT_WORKCHAIN,
         walletId: Long = WalletKitConstants.DEFAULT_WALLET_ID_V4R2,
+        domain: TONSignatureDomain? = null,
     ): TONWalletAdapter
 
     // ── Add wallet ──
@@ -134,7 +158,7 @@ interface ITONWalletKit {
     /**
      * Trigger transaction approval flow.
      */
-    suspend fun handleNewTransaction(wallet: ITONWallet, transactionContent: String)
+    suspend fun handleNewTransaction(wallet: ITONWallet, transactionContent: TONTransactionRequest)
 
     /**
      * Handle a TON Connect URL (tc:// or https://).
@@ -147,14 +171,69 @@ interface ITONWalletKit {
      */
     suspend fun connectionEventFromUrl(url: String): TONWalletConnectionRequest
 
-    suspend fun listSessions(): List<io.ton.walletkit.session.TONConnectSession>
+    suspend fun listSessions(): List<TONConnectSession>
 
     suspend fun disconnectSession(sessionId: String)
 
     /**
      * Create WebView TON Connect injector.
      */
-    fun createWebViewInjector(webView: android.webkit.WebView, walletId: String? = null): WebViewTonConnectInjector
+    fun createWebViewInjector(webView: WebView, walletId: String? = null): WebViewTonConnectInjector
+
+    // ── Swap ──
+
+    /**
+     * Create an Omniston (STON.fi) swap provider.
+     *
+     * Call [swap().registerProvider] with the returned handle before calling [swap().getQuote].
+     */
+    suspend fun omnistonSwapProvider(config: TONOmnistonSwapProviderConfig? = null): TONOmnistonSwapProvider
+
+    /**
+     * Create a DeDust swap provider.
+     *
+     * Call [swap().registerProvider] with the returned handle before calling [swap().getQuote].
+     */
+    suspend fun dedustSwapProvider(config: TONDeDustSwapProviderConfig? = null): TONDeDustSwapProvider
+
+    /**
+     * Get the swap manager for registering providers and executing swaps.
+     */
+    suspend fun swap(): ITONSwapManager
+
+    // ── Staking ──
+
+    /**
+     * Access the staking manager for registering providers and performing staking operations.
+     */
+    fun staking(): ITONStakingManager
+
+    /**
+     * Create a TonStakers staking provider.
+     *
+     * Call [ITONStakingManager.register] with the returned provider to make it available for quotes.
+     *
+     * @param config Optional per-chain configuration (contract address, TonAPI key)
+     * @return A provider that can be registered with [staking]
+     */
+    suspend fun tonStakersStakingProvider(
+        config: TONTonStakersProviderConfig? = null,
+    ): TONTonStakersStakingProvider
+
+    // ── Streaming ──
+
+    /**
+     * Get the streaming manager.
+     */
+    fun streaming(): ITONStreamingManager
+
+    suspend fun createStreamingProvider(
+        config: TONTonCenterStreamingProviderConfig,
+    ): ITONStreamingProvider
+
+    suspend fun createStreamingProvider(
+        config: TONTonApiStreamingProviderConfig,
+    ): ITONStreamingProvider
 }
 
 interface WebViewTonConnectInjector {

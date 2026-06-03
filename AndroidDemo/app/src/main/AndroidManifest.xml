@@ -28,5 +28,11 @@
             android:name="io.ton.walletkit.demo.presentation.DAppBrowserActivity"
             android:exported="false"
             android:theme="@style/Theme.WalletKitDemo" />
+
+        <!-- Eagerly install the GMS barcode-scanner module so the QR scanner in the
+             dev Investigation screen is ready on first use. -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
     </application>
 </manifest>

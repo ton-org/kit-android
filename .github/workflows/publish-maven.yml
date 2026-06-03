@@ -15,33 +15,27 @@ jobs:
       - name: Checkout kit-android code
         uses: actions/checkout@v4
 
-      - name: Get latest kit release info
-        id: kit-release
-        run: |
-          RELEASE_INFO=$(curl -s https://api.github.com/repos/ton-connect/kit/releases/latest)
-          TAG=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
-          ANDROID_BRIDGE_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | contains("walletkit-android-bridge")) | select(.name | endswith(".tgz")) | .browser_download_url')
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "android_bridge_url=$ANDROID_BRIDGE_URL" >> $GITHUB_OUTPUT
-          echo "📦 Using kit release: $TAG"
-          echo "📦 Android bridge URL: $ANDROID_BRIDGE_URL"
+      # Ship the bundle committed in this repo (no download). Guard that it matches the
+      # pinned kit release so a stale/hand-edited bundle can never reach Maven Central.
+      - name: Verify bridge bundle matches WALLETKIT_BRIDGE_TAG
+        uses: ./.github/actions/verify-walletkit-bridge
 
-      - name: Download and extract Android bridge bundle
+      - name: Populate dist-android from committed assets
         run: |
           mkdir -p dist-android
-          curl -sL "${{ steps.kit-release.outputs.android_bridge_url }}" -o android-bridge.tgz
-          tar -xzf android-bridge.tgz
-          cp package/dist/* dist-android/
-          rm -rf package android-bridge.tgz
-          echo "📦 Extracted Android bridge bundle:"
+          cp TONWalletKit-Android/impl/src/main/assets/walletkit/* dist-android/
+          echo "📦 Using committed bridge bundle:"
           ls -la dist-android/
 
       - name: Determine version
         id: version
         run: |
           VERSION=$(grep "VERSION_NAME=" TONWalletKit-Android/gradle.properties | cut -d'=' -f2)
+          BRIDGE_TAG=$(grep "WALLETKIT_BRIDGE_TAG=" TONWalletKit-Android/gradle.properties | cut -d'=' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "bridge_tag=$BRIDGE_TAG" >> $GITHUB_OUTPUT
           echo "📦 SDK Version: $VERSION"
+          echo "📦 Bridge tag: $BRIDGE_TAG"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -63,17 +57,17 @@ jobs:
 
       - name: Run unit tests
         working-directory: TONWalletKit-Android
-        run: ./gradlew :impl:testWebviewDebugUnitTest
+        run: ./gradlew :impl:testDebugUnitTest
 
-      - name: Build WebView variant (Release)
+      - name: Build SDK (Release)
         working-directory: TONWalletKit-Android
-        run: ./gradlew buildWebviewRelease
+        run: ./gradlew buildSdkRelease
 
-      - name: Upload WebView AAR
+      - name: Upload SDK AAR
         uses: actions/upload-artifact@v4
         with:
-          name: sdk-webview-aar
-          path: TONWalletKit-Android/impl/build/outputs/aar/impl-webview-release.aar
+          name: sdk-aar
+          path: TONWalletKit-Android/impl/build/outputs/aar/impl-release.aar
           retention-days: 7
 
       - name: Publish and Release to Maven Central
@@ -91,4 +85,4 @@ jobs:
           echo "🚀 Published to Maven Central"
           echo ""
           echo "📦 Artifact: org.ton:walletkit:${{ steps.version.outputs.version }}"
-          echo "📦 Using kit release: ${{ steps.kit-release.outputs.tag }}"
+          echo "📦 Bridge tag: ${{ steps.version.outputs.bridge_tag }}"

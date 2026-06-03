@@ -16,7 +16,7 @@
     "TONConnectSession": "TONConnectSession"
   },
   "typeMappings": {
-    "number": "kotlin.Int",
+    "number": "kotlin.Double",
     "integer": "kotlin.Int",
     "int64": "kotlin.Long",
     "int32": "kotlin.Int",
@@ -37,7 +37,8 @@
     "Hex": "io.ton.walletkit.model.TONHex",
     "LogicalTime": "kotlin.String",
     "Base64String": "io.ton.walletkit.model.TONBase64",
-    "TokenAmount": "kotlin.String"
+    "TokenAmount": "kotlin.String",
+    "WalletId": "kotlin.String"
   },
   "importMappings": {
     "kotlinx.serialization.json.JsonObject": "kotlinx.serialization.json.JsonObject",
@@ -51,6 +52,7 @@
     "Hex": "io.ton.walletkit.model.TONHex",
     "LogicalTime": "kotlin.String",
     "Base64String": "io.ton.walletkit.model.TONBase64",
-    "TokenAmount": "kotlin.String"
+    "TokenAmount": "kotlin.String",
+    "WalletId": "kotlin.String"
   }
 }

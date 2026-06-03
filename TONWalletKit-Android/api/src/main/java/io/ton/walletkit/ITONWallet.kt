@@ -22,13 +22,12 @@
 package io.ton.walletkit
 
 import io.ton.walletkit.api.generated.*
+import io.ton.walletkit.client.TONAPIClient
 import io.ton.walletkit.model.TONBalance
 import io.ton.walletkit.model.TONUserFriendlyAddress
 
 /**
  * TON wallet instance for transaction management and dApp interactions.
- *
- * Mirrors the iOS TONWalletProtocol for cross-platform consistency.
  */
 interface ITONWallet {
     /**
@@ -40,6 +39,9 @@ interface ITONWallet {
      * Wallet address in user-friendly format.
      */
     val address: TONUserFriendlyAddress
+
+    /** API client backing this wallet — exposes per-wallet network and RPC. */
+    val client: TONAPIClient
 
     /**
      * Get wallet balance.
@@ -66,16 +68,21 @@ interface ITONWallet {
      * Send a transaction to the blockchain.
      *
      * @param transactionRequest Transaction request from transferTON/NFT/Jetton methods
+     * @return Broadcast response (boc, normalizedBoc, normalizedHash).
      */
-    suspend fun send(transactionRequest: TONTransactionRequest)
+    suspend fun send(transactionRequest: TONTransactionRequest): TONSendTransactionResponse
 
     /**
      * Get transaction preview with fee estimation.
      *
      * @param transactionRequest Transaction request to preview
+     * @param options Optional preview options (mode, relayGas)
      * @return Preview with estimated fees and trace
      */
-    suspend fun preview(transactionRequest: TONTransactionRequest): TONTransactionEmulatedPreview
+    suspend fun preview(
+        transactionRequest: TONTransactionRequest,
+        options: TONTransactionPreviewOptions? = null,
+    ): TONTransactionEmulatedPreview
 
     /**
      * Create an NFT transfer transaction.
@@ -143,12 +150,6 @@ interface ITONWallet {
      */
     suspend fun jettons(request: TONJettonsRequest): TONJettonsResponse
 }
-
-/**
- * Convenience extensions for ITONWallet.
- *
- * Mirrors iOS TONWalletProtocol extensions.
- */
 
 /**
  * Get NFTs with a simple limit parameter.

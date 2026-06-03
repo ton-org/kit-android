@@ -21,6 +21,11 @@
  */
 package io.ton.walletkit.demo.presentation.ui.screen
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,10 +38,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -45,6 +47,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -53,13 +56,16 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -68,8 +74,12 @@ import io.ton.walletkit.ITONWalletKit
 import io.ton.walletkit.api.generated.TONNFT
 import io.ton.walletkit.api.generated.TONNetwork
 import io.ton.walletkit.demo.R
+import io.ton.walletkit.demo.designsystem.icons.TonIcon
+import io.ton.walletkit.demo.designsystem.icons.TonIconImage
+import io.ton.walletkit.demo.designsystem.theme.TonTheme
 import io.ton.walletkit.demo.domain.model.WalletInterfaceType
 import io.ton.walletkit.demo.presentation.actions.WalletActions
+import io.ton.walletkit.demo.presentation.dev.DevPreferences
 import io.ton.walletkit.demo.presentation.model.ConnectRequestUi
 import io.ton.walletkit.demo.presentation.model.JettonDetails
 import io.ton.walletkit.demo.presentation.model.JettonSummary
@@ -80,32 +90,123 @@ import io.ton.walletkit.demo.presentation.model.WalletSummary
 import io.ton.walletkit.demo.presentation.state.SheetState
 import io.ton.walletkit.demo.presentation.state.WalletUiState
 import io.ton.walletkit.demo.presentation.ui.components.QuickActionsCard
-import io.ton.walletkit.demo.presentation.ui.components.StatusHeader
-import io.ton.walletkit.demo.presentation.ui.components.WalletSwitcher
+import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeAssetIcon
+import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeAssetItem
+import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeContent
+import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeHeader
+import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeNFTPreview
 import io.ton.walletkit.demo.presentation.ui.dialog.SignerConfirmationDialog
 import io.ton.walletkit.demo.presentation.ui.dialog.UrlPromptDialog
-import io.ton.walletkit.demo.presentation.ui.preview.PreviewData
-import io.ton.walletkit.demo.presentation.ui.sections.EventLogSection
-import io.ton.walletkit.demo.presentation.ui.sections.JettonsSection
-import io.ton.walletkit.demo.presentation.ui.sections.NFTsSection
-import io.ton.walletkit.demo.presentation.ui.sections.SessionsSection
-import io.ton.walletkit.demo.presentation.ui.sections.WalletsSection
 import io.ton.walletkit.demo.presentation.ui.sheet.AddWalletSheet
+import io.ton.walletkit.demo.presentation.ui.sheet.BrowserSession
 import io.ton.walletkit.demo.presentation.ui.sheet.BrowserSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.ConnectRequestSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.JettonDetailsSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.SignDataSheet
+import io.ton.walletkit.demo.presentation.ui.sheet.SignMessageRequestSheet
+import io.ton.walletkit.demo.presentation.ui.sheet.StakingSheet
+import io.ton.walletkit.demo.presentation.ui.sheet.SwapSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.TransactionDetailSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.TransactionRequestSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.TransferJettonSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.WalletDetailsSheet
-import io.ton.walletkit.demo.presentation.util.TestTags
+import io.ton.walletkit.demo.presentation.ui.sheet.WalletsBottomSheet
 import io.ton.walletkit.demo.presentation.viewmodel.NFTsListViewModel
-import io.ton.walletkit.extensions.cleanupTonConnect
+import io.ton.walletkit.demo.presentation.viewmodel.SwapViewModel
 
 // URL for the TonConnect E2E test runner dApp
 // This is the same dApp used by web demo-wallet E2E tests
 private const val DEFAULT_DAPP_URL = "https://allure-test-runner.vercel.app/e2e"
+
+private const val MAX_ASSETS = 3
+private const val MAX_NFTS = 5
+private const val MAX_FRACTION_DIGITS = 5
+
+private object WalletHomeTopBar {
+    fun shortAddress(address: String): String {
+        if (address.length <= 10) return address
+        return "${address.take(4)}...${address.takeLast(6)}"
+    }
+}
+
+private fun trimFraction(value: String?, maxFractionDigits: Int): String {
+    val raw = value.orEmpty().ifBlank { "0" }
+    val dotIndex = raw.indexOf('.')
+    if (dotIndex < 0) return raw
+    val fractionStart = dotIndex + 1
+    val fraction = raw.substring(fractionStart)
+    if (fraction.length <= maxFractionDigits) return raw
+    var truncated = raw.substring(0, fractionStart + maxFractionDigits)
+    while (truncated.endsWith('0')) truncated = truncated.dropLast(1)
+    if (truncated.endsWith('.')) truncated = truncated.dropLast(1)
+    return truncated
+}
+
+private fun splitBalance(rawBalance: String?, maxFractionDigits: Int): Pair<String, String> {
+    val trimmed = trimFraction(rawBalance, maxFractionDigits)
+    val dotIndex = trimmed.indexOf('.')
+    return if (dotIndex < 0) {
+        trimmed to ""
+    } else {
+        trimmed.substring(0, dotIndex) to trimmed.substring(dotIndex)
+    }
+}
+
+private fun buildAssetList(
+    rawBalance: String?,
+    jettons: List<JettonSummary>,
+    maxFractionDigits: Int,
+    maxAssets: Int,
+): List<WalletHomeAssetItem> {
+    val tonAmount = trimFraction(rawBalance, maxFractionDigits)
+    val tonItem = WalletHomeAssetItem(
+        id = "ton",
+        name = "Toncoin",
+        symbol = "TON",
+        formattedAmount = "$tonAmount TON",
+        icon = WalletHomeAssetIcon.Ton,
+    )
+    val items = mutableListOf(tonItem)
+    jettons.take(maxAssets - 1).forEach { jetton ->
+        val amount = trimFraction(jetton.balance, maxFractionDigits)
+        val icon = jetton.imageUrl?.takeIf { it.isNotBlank() }
+            ?.let { WalletHomeAssetIcon.Url(it) }
+            ?: WalletHomeAssetIcon.Placeholder(jetton.symbol)
+        items += WalletHomeAssetItem(
+            id = jetton.address,
+            name = jetton.name,
+            symbol = jetton.symbol,
+            formattedAmount = "$amount ${jetton.symbol}",
+            icon = icon,
+        )
+    }
+    return items
+}
+
+private sealed interface HomeSubScreen {
+    data object None : HomeSubScreen
+    data object AllAssets : HomeSubScreen
+    data object AllNFTs : HomeSubScreen
+    data object Investigation : HomeSubScreen
+}
+
+private fun nftPreviewFrom(nft: TONNFT): WalletHomeNFTPreview {
+    val info = nft.info
+    return WalletHomeNFTPreview(
+        id = nft.address.value,
+        name = info?.name ?: "Unknown NFT",
+        address = nft.address.value,
+        imageUrl = info?.image?.mediumUrl ?: info?.image?.url,
+    )
+}
+
+private fun networkLabelFor(network: TONNetwork?): String = when (network?.chainId) {
+    io.ton.walletkit.api.ChainIds.MAINNET -> "MainNet"
+    io.ton.walletkit.api.ChainIds.TESTNET -> "TestNet"
+    io.ton.walletkit.api.ChainIds.TETRA -> "Tetra"
+    null -> "MainNet"
+    else -> "TON"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,28 +214,37 @@ fun WalletScreen(
     state: WalletUiState,
     walletKit: ITONWalletKit,
     nftsViewModel: NFTsListViewModel?,
+    swapViewModel: SwapViewModel?,
     actions: WalletActions,
 ) {
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val onRefreshAll: () -> Unit = {
+        actions.onRefresh()
+        actions.onRefreshJettons()
+        nftsViewModel?.refresh()
+    }
+
     // State for NFT details bottom sheet
     var selectedNFT by remember { mutableStateOf<TONNFT?>(null) }
-    val nftDetailsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val nftDetailsSheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        // Block swipe-down / scrim-drag dismissal so users scrolling the sheet content
+        // don't accidentally hide it. The explicit close button (and composition removal
+        // when `selectedNFT = null`) handles teardown.
+        confirmValueChange = { it != SheetValue.Hidden },
+    )
 
-    // Keep browser WebView alive across sheet changes to prevent destruction during TonConnect requests
-    // This WebView persists even when switching to Connect/Transaction sheets
-    val browserWebViewHolder = remember { mutableStateOf<android.webkit.WebView?>(null) }
+    // Two independent browser sessions — one with WalletKit injection, one without.
+    // Kept at this level so tabs survive Connect/Transaction overlay sheets.
+    val injectedSession = remember { BrowserSession(injectTonConnect = true) }
+    val plainSession = remember { BrowserSession(injectTonConnect = false) }
 
-    // Cleanup WebView when WalletScreen is disposed
     DisposableEffect(Unit) {
         onDispose {
-            browserWebViewHolder.value?.let { webView ->
-                // Clean up TonConnect resources before destroying WebView
-                webView.cleanupTonConnect()
-                webView.destroy()
-            }
-            browserWebViewHolder.value = null
+            injectedSession.destroyAllWebViews()
+            plainSession.destroyAllWebViews()
         }
     }
 
@@ -143,15 +253,22 @@ fun WalletScreen(
         snackbarHostState.showSnackbar(error)
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        // Block swipe-down / scrim-drag dismissal. Each sheet's own close button (and
+        // `actions::onDismissSheet` via the back button) is the only way out.
+        confirmValueChange = { it != SheetValue.Hidden },
+    )
     val sheet = state.sheetState
     val showSheet = sheet !is SheetState.None
-    // Ensure the modal bottom sheet is hidden when the ViewModel clears the sheet state.
     LaunchedEffect(state.sheetState) {
         if (state.sheetState is SheetState.None && sheetState.isVisible) {
-            // Animate hide to avoid leaving the sheet visible when it's removed from composition
             sheetState.hide()
         }
+        // Open initial tab when browser sheet is first shown for each session type
+        val browserSheet = state.sheetState as? SheetState.Browser ?: return@LaunchedEffect
+        val session = if (browserSheet.injectTonConnect) injectedSession else plainSession
+        if (session.tabs.isEmpty()) session.openTab(browserSheet.url)
     }
     val activeWallet = state.wallets.firstOrNull { it.address == state.activeWalletAddress }
         ?: state.wallets.firstOrNull()
@@ -159,6 +276,7 @@ fun WalletScreen(
         ModalBottomSheet(
             onDismissRequest = actions::onDismissSheet,
             sheetState = sheetState,
+            containerColor = TonTheme.colors.bgPrimary,
             dragHandle = null,
         ) {
             when (sheet) {
@@ -180,12 +298,24 @@ fun WalletScreen(
                     request = sheet.request,
                     onApprove = { actions.onApproveTransaction(sheet.request) },
                     onReject = { actions.onRejectTransaction(sheet.request) },
+                    wallet = state.wallets.firstOrNull { it.address == sheet.request.walletAddress }
+                        ?: activeWallet,
                 )
 
                 is SheetState.SignData -> SignDataSheet(
                     request = sheet.request,
                     onApprove = { actions.onApproveSignData(sheet.request) },
                     onReject = { actions.onRejectSignData(sheet.request) },
+                    wallet = state.wallets.firstOrNull { it.address == sheet.request.walletAddress }
+                        ?: activeWallet,
+                )
+
+                is SheetState.SignMessage -> SignMessageRequestSheet(
+                    request = sheet.request,
+                    onApprove = { actions.onApproveSignMessage(sheet.request) },
+                    onReject = { actions.onRejectSignMessage(sheet.request) },
+                    wallet = state.wallets.firstOrNull { it.address == sheet.request.walletAddress }
+                        ?: activeWallet,
                 )
 
                 is SheetState.WalletDetails -> WalletDetailsSheet(
@@ -203,17 +333,22 @@ fun WalletScreen(
                     isLoading = state.isSendingTransaction,
                 )
 
+                is SheetState.Staking -> StakingSheet(
+                    wallet = sheet.wallet,
+                    walletKit = walletKit,
+                    sheetKey = sheet.openedAt,
+                    onDismiss = actions::onDismissSheet,
+                )
+
                 is SheetState.TransactionDetail -> TransactionDetailSheet(
                     transaction = sheet.transaction,
                     onDismiss = actions::onDismissSheet,
                 )
 
                 is SheetState.Browser -> BrowserSheet(
-                    url = sheet.url,
+                    session = if (sheet.injectTonConnect) injectedSession else plainSession,
                     onClose = actions::onDismissSheet,
                     walletKit = walletKit,
-                    webViewHolder = browserWebViewHolder,
-                    injectTonConnect = sheet.injectTonConnect,
                 )
 
                 is SheetState.JettonDetails -> {
@@ -233,6 +368,12 @@ fun WalletScreen(
                         },
                         isLoading = false,
                     )
+                }
+
+                is SheetState.Swap -> {
+                    swapViewModel?.let { vm ->
+                        SwapSheet(viewModel = vm, onDismiss = actions::onDismissSheet)
+                    }
                 }
 
                 SheetState.None -> Unit
@@ -256,36 +397,104 @@ fun WalletScreen(
         )
     }
 
+    val activeIndex = state.wallets.indexOfFirst { it.address == state.activeWalletAddress }
+    val homeTitle = if (activeIndex >= 0) "Wallet ${activeIndex + 1}" else "Wallet"
+    val homeAddress = activeWallet?.address.orEmpty()
+    val homeNetworkLabel = networkLabelFor(activeWallet?.network)
+    val nftsList by (nftsViewModel?.nfts?.collectAsState() ?: remember { mutableStateOf(emptyList<TONNFT>()) })
+
+    LaunchedEffect(nftsViewModel) {
+        nftsViewModel?.loadNFTs()
+    }
+    val (totalInteger, totalFraction) = remember(activeWallet?.balance) {
+        splitBalance(activeWallet?.balance, MAX_FRACTION_DIGITS)
+    }
+    val assetItems = remember(activeWallet?.balance, state.jettons) {
+        buildAssetList(activeWallet?.balance, state.jettons, MAX_FRACTION_DIGITS, MAX_ASSETS)
+    }
+    val hasMoreAssets = state.jettons.size > (MAX_ASSETS - 1)
+    val nftPreviews = remember(nftsList) {
+        nftsList.take(MAX_NFTS).map(::nftPreviewFrom)
+    }
+    val hasMoreNFTs = nftsList.size > MAX_NFTS
+
+    var showWalletsSheet by remember { mutableStateOf(false) }
+    var subScreen by remember { mutableStateOf<HomeSubScreen>(HomeSubScreen.None) }
+    val walletsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
+
+    // Reset the sub-screen on wallet switch so the user lands on home for the
+    // new wallet (mirrors iOS NavigationStack popping on `.id(active.id)`).
+    LaunchedEffect(state.activeWalletAddress) {
+        subScreen = HomeSubScreen.None
+    }
+    if (subScreen != HomeSubScreen.None) {
+        BackHandler { subScreen = HomeSubScreen.None }
+        when (val current = subScreen) {
+            HomeSubScreen.AllAssets -> {
+                AllAssetsScreen(
+                    assets = remember(activeWallet?.balance, state.jettons) {
+                        buildAssetList(
+                            rawBalance = activeWallet?.balance,
+                            jettons = state.jettons,
+                            maxFractionDigits = MAX_FRACTION_DIGITS,
+                            // No cap — show everything on the all-assets screen.
+                            maxAssets = Int.MAX_VALUE,
+                        )
+                    },
+                    onBack = { subScreen = HomeSubScreen.None },
+                )
+            }
+            HomeSubScreen.AllNFTs -> {
+                AllNFTsScreen(
+                    nfts = remember(nftsList) { nftsList.map(::nftPreviewFrom) },
+                    onTap = { preview ->
+                        nftsList.firstOrNull { it.address.value == preview.address }
+                            ?.let { selectedNFT = it }
+                    },
+                    onBack = { subScreen = HomeSubScreen.None },
+                )
+            }
+            HomeSubScreen.Investigation -> {
+                WalletKitInvestigationScreen(
+                    onBack = { subScreen = HomeSubScreen.None },
+                    onConnect = actions::onHandleUrl,
+                )
+            }
+            HomeSubScreen.None -> Unit
+        }
+        // Drain the rest of the composable to render only the sub-screen + its modals.
+        // Falling through would also render the home Scaffold underneath.
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = stringResource(R.string.wallet_screen_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    if (activeWallet != null) {
+                        WalletHomeHeader(
+                            title = homeTitle,
+                            networkLabel = homeNetworkLabel,
+                            truncatedAddress = WalletHomeTopBar.shortAddress(homeAddress),
+                            onClick = { showWalletsSheet = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.wallet_screen_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 },
                 actions = {
-                    IconButton(onClick = { actions.onOpenBrowser(DEFAULT_DAPP_URL) }) {
-                        Icon(Icons.Default.Language, contentDescription = "Open dApp Browser")
-                    }
-                    // Open browser WITHOUT TonConnect injection
-                    // This allows E2E tests to use the standard TonConnect modal with QR code
-                    IconButton(
-                        onClick = { actions.onOpenBrowser(DEFAULT_DAPP_URL, injectTonConnect = false) },
-                        modifier = Modifier.testTag(TestTags.BROWSER_NO_INJECT_BUTTON),
-                    ) {
-                        Icon(Icons.Outlined.Language, contentDescription = "Open dApp Browser (No Injection)")
-                    }
-                    IconButton(onClick = actions::onRefresh) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.action_refresh))
-                    }
-                    IconButton(onClick = actions::onUrlPromptClick) {
-                        Icon(Icons.Outlined.Link, contentDescription = stringResource(R.string.action_handle_url))
-                    }
-                    IconButton(onClick = actions::onAddWalletClick) {
-                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_wallet))
+                    IconButton(onClick = { subScreen = HomeSubScreen.Investigation }) {
+                        TonIconImage(
+                            icon = TonIcon.Settings24,
+                            size = 24.dp,
+                            tint = TonTheme.colors.textPrimary,
+                        )
                     }
                 },
             )
@@ -295,98 +504,70 @@ fun WalletScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+                .padding(padding),
         ) {
-            // Always reserve space for progress indicator to prevent content shift
+            // Always reserve space for progress indicator to prevent content shift.
             Box(modifier = Modifier.fillMaxWidth().height(4.dp)) {
                 if (state.isLoadingWallets || state.isLoadingSessions) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
             }
-            StatusHeader(state)
 
-            QuickActionsCard(
-                onHandleUrl = actions::onUrlPromptClick,
-                onAddWallet = actions::onAddWalletClick,
-                onRefresh = actions::onRefresh,
+            WalletHomeContent(
+                totalBalanceInteger = totalInteger,
+                totalBalanceFraction = totalFraction,
+                assets = assetItems,
+                nfts = nftPreviews,
+                hasMoreAssets = hasMoreAssets,
+                hasMoreNFTs = hasMoreNFTs,
+                onDeposit = { activeWallet?.let { actions.onWalletDetails(it.address) } },
+                onSend = { activeWallet?.let { actions.onSendFromWallet(it.address) } },
+                onReceive = { activeWallet?.let { actions.onWalletDetails(it.address) } },
+                onShowAllAssets = { subScreen = HomeSubScreen.AllAssets },
+                onShowAllNFTs = { subScreen = HomeSubScreen.AllNFTs },
+                onNFTTap = { preview ->
+                    nftsList.firstOrNull { it.address.value == preview.address }?.let { selectedNFT = it }
+                },
+                onBalanceSecretTap = {
+                    val nowLegacy = DevPreferences.toggleLegacyMainScreen(context)
+                    Toast.makeText(
+                        context,
+                        if (nowLegacy) "Legacy main screen ON" else "Legacy main screen OFF",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                },
             )
+        }
+    }
 
-            // Wallet Switcher (only show if multiple wallets exist)
-            if (state.wallets.size > 1) {
-                WalletSwitcher(
-                    wallets = state.wallets,
-                    activeWalletAddress = state.activeWalletAddress,
-                    isExpanded = state.isWalletSwitcherExpanded,
-                    onToggle = actions::onToggleWalletSwitcher,
-                    onSwitchWallet = actions::onSwitchWallet,
-                    onRemoveWallet = actions::onRemoveWallet,
-                    onRenameWallet = actions::onRenameWallet,
-                )
-            }
-
-            WalletsSection(
-                activeWallet = activeWallet,
-                totalWallets = state.wallets.size,
-                onWalletSelected = actions::onWalletDetails,
-                onSendFromWallet = actions::onSendFromWallet,
+    if (showWalletsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showWalletsSheet = false },
+            sheetState = walletsSheetState,
+            containerColor = TonTheme.colors.bgPrimary,
+            dragHandle = null,
+        ) {
+            WalletsBottomSheet(
+                wallets = state.wallets,
+                activeWalletAddress = state.activeWalletAddress,
+                onSelect = { wallet ->
+                    actions.onSwitchWallet(wallet.address)
+                    showWalletsSheet = false
+                },
+                onCopyAddress = { address ->
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                    clipboard?.setPrimaryClip(ClipData.newPlainText("Wallet address", address))
+                },
+                onAddWallet = {
+                    showWalletsSheet = false
+                    actions.onStartCreateWalletFlow()
+                },
+                onDelete = { wallet ->
+                    showWalletsSheet = false
+                    actions.onRemoveWallet(wallet.address)
+                },
+                onClose = { showWalletsSheet = false },
             )
-
-            // Show NFTs for the active wallet (if ViewModel is available)
-            if (nftsViewModel != null) {
-                NFTsSection(
-                    viewModel = nftsViewModel,
-                    onNFTClick = { nft -> selectedNFT = nft },
-                )
-            }
-
-            // Show Jettons for the active wallet
-            JettonsSection(
-                jettons = state.jettons,
-                isLoading = state.isLoadingJettons,
-                error = state.jettonsError,
-                canLoadMore = state.canLoadMoreJettons,
-                onJettonClick = actions::onShowJettonDetails,
-                onLoadMore = actions::onLoadMoreJettons,
-                onRefresh = actions::onRefreshJettons,
-            )
-
-            // Transaction history - Coming Soon
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = "Transaction History",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Coming Soon",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            SessionsSection(
-                sessions = state.sessions,
-                onDisconnect = actions::onDisconnectSession,
-            )
-
-            if (state.events.isNotEmpty()) {
-                EventLogSection(events = state.events)
-            }
-
-            Spacer(modifier = Modifier.height(48.dp))
         }
     }
 
@@ -395,6 +576,7 @@ fun WalletScreen(
         ModalBottomSheet(
             onDismissRequest = { selectedNFT = null },
             sheetState = nftDetailsSheetState,
+            containerColor = TonTheme.colors.bgPrimary,
             dragHandle = null,
         ) {
             // Get the wallet to pass to NFTDetailsScreen
@@ -406,8 +588,9 @@ fun WalletScreen(
                     nftDetails = nftDetails,
                     onClose = { selectedNFT = null },
                     onTransferSuccess = {
-                        // Refresh NFT list after successful transfer
-                        nftsViewModel?.refresh()
+                        val nftAddress = selectedNFT?.address?.value
+                        nftAddress?.let { addr -> nftsViewModel?.removeNft(addr) }
+                        nftsViewModel?.refreshWithDelay()
                     },
                 )
             }

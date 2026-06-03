@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -16,6 +17,28 @@ configurations.all {
     }
 }
 
+fun escapedBuildConfigString(value: String): String {
+    val escaped =
+        value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+    return "\"$escaped\""
+}
+
+fun readLocalProperty(
+    rootDir: java.io.File,
+    name: String,
+): String? {
+    val localPropertiesFile = rootDir.resolve("local.properties")
+    if (!localPropertiesFile.exists()) {
+        return null
+    }
+
+    val properties = Properties()
+    localPropertiesFile.inputStream().use(properties::load)
+    return properties.getProperty(name)
+}
+
 android {
     namespace = "io.ton.walletkit.demo"
     compileSdk = 36
@@ -24,8 +47,8 @@ android {
         applicationId = "io.ton.walletkit.demo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+        versionName = findProperty("DEMO_VERSION_NAME") as String? ?: "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Pass instrumentation arguments from gradle properties or environment
@@ -41,6 +64,30 @@ android {
         val allureToken =
             findProperty("allureToken") as String?
                 ?: System.getenv("ALLURE_API_TOKEN")
+        val toncenterApiKey =
+            findProperty("walletkitToncenterApiKey") as String?
+                ?: readLocalProperty(rootDir, "walletkitToncenterApiKey")
+                ?: readLocalProperty(rootDir, "tonCenterApiKey")
+                ?: System.getenv("WALLETKIT_TONCENTER_API_KEY")
+                ?: System.getenv("TONCENTER_API_KEY")
+                ?: ""
+        val tonApiKey =
+            findProperty("walletkitTonApiKey") as String?
+                ?: readLocalProperty(rootDir, "walletkitTonApiKey")
+                ?: System.getenv("WALLETKIT_TONAPI_API_KEY")
+                ?: ""
+        val tonApiMainnetKey =
+            readLocalProperty(rootDir, "tonApiMainnetKey")
+                ?: System.getenv("MAINNET_API_KEY")
+                ?: ""
+        val tonApiTestnetKey =
+            readLocalProperty(rootDir, "tonApiTestnetKey")
+                ?: System.getenv("TESTNET_API_KEY")
+                ?: ""
+        val tetraApiKey =
+            readLocalProperty(rootDir, "tetraApiKey")
+                ?: System.getenv("TETRA_API_KEY")
+                ?: ""
 
         testMnemonic?.let {
             testInstrumentationRunnerArguments["testMnemonic"] = it
@@ -49,12 +96,29 @@ android {
         allureToken?.let {
             testInstrumentationRunnerArguments["allureToken"] = it
         }
+
+        buildConfigField("String", "TONCENTER_API_KEY", escapedBuildConfigString(toncenterApiKey))
+        buildConfigField("String", "TONAPI_API_KEY", escapedBuildConfigString(tonApiKey))
+        buildConfigField("String", "MAINNET_API_KEY", escapedBuildConfigString(tonApiMainnetKey))
+        buildConfigField("String", "TESTNET_API_KEY", escapedBuildConfigString(tonApiTestnetKey))
+        buildConfigField("String", "TETRA_API_KEY", escapedBuildConfigString(tetraApiKey))
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -63,7 +127,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
+        buildConfig = true
         compose = true
+        buildConfig = true
     }
 }
 
@@ -74,6 +140,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":designsystem"))
+
     implementation(libs.androidxCoreKtx)
     implementation(libs.androidxAppcompat)
     implementation(libs.googleMaterial)
@@ -83,24 +151,30 @@ dependencies {
     implementation(platform(libs.androidxComposeBom))
     implementation(libs.androidxComposeUi)
     implementation(libs.androidxComposeMaterial3)
-    implementation(libs.androidxComposeMaterialIconsExtended)
+    // material-icons-core (~50 icons) replaces material-icons-extended (~11,000 icons,
+    // ~40 MB of DEX). The 15 icons the demo uses that aren't in `core` are defined locally
+    // in io.ton.walletkit.demo.presentation.ui.icons.DemoIcons.
+    implementation(libs.androidxComposeMaterialIconsCore)
     implementation(libs.androidxComposeUiToolingPreview)
     debugImplementation(libs.androidxComposeUiTooling)
     implementation(libs.androidxLifecycleRuntimeKtx)
     implementation(libs.androidxLifecycleViewmodelCompose)
     implementation(libs.kotlinxCoroutinesAndroid)
     implementation(libs.androidxSecurityCrypto)
+    implementation(libs.androidxBiometric)
     implementation(libs.coilCompose)
     implementation(libs.coilNetwork)
+
+    // GMS Code Scanner — fully-managed QR scanner UI (runs in Google Play services,
+    // no CAMERA permission needed in the app). Used by the dev Investigation screen.
+    implementation(libs.playServicesCodeScanner)
 
     // Hilt dependency injection
     implementation(libs.hiltAndroid)
     ksp(libs.hiltCompiler)
 
-    // TONWalletKit SDK
-//    implementation(libs.walletkitAndroid)
     // TONWalletKit SDK - Use local AAR file
-    // Build and copy with: cd ../TONWalletKit-Android && ./gradlew buildAndCopyWebviewToDemo
+    // Build and copy with: cd ../TONWalletKit-Android && ./gradlew buildAndCopyToDemo
     implementation(files("libs/tonwalletkit-release.aar"))
     // Required transitive dependencies when using AAR:
     implementation(libs.androidxWebkit)

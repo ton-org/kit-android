@@ -55,7 +55,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TONNFT(
 
-    @Contextual @SerialName(value = "address")
+    @SerialName(value = "address")
     val address: io.ton.walletkit.model.TONUserFriendlyAddress,
 
     /* Index of the item within its collection */
@@ -72,7 +72,7 @@ data class TONNFT(
     @SerialName(value = "collection")
     val collection: TONNFTCollection? = null,
 
-    @Contextual @SerialName(value = "auctionContractAddress")
+    @SerialName(value = "auctionContractAddress")
     val auctionContractAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     @Contextual @SerialName(value = "codeHash")
@@ -93,13 +93,13 @@ data class TONNFT(
     @SerialName(value = "isOnSale")
     val isOnSale: kotlin.Boolean? = null,
 
-    @Contextual @SerialName(value = "ownerAddress")
+    @SerialName(value = "ownerAddress")
     val ownerAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "realOwnerAddress")
+    @SerialName(value = "realOwnerAddress")
     val realOwnerAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "saleContractAddress")
+    @SerialName(value = "saleContractAddress")
     val saleContractAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     /* Off-chain metadata of the NFT (key-value pairs) */

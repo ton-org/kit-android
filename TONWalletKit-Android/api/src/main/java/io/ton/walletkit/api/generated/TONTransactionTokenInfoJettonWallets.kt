@@ -61,10 +61,10 @@ data class TONTransactionTokenInfoJettonWallets(
     @SerialName(value = "balance")
     val balance: kotlin.String,
 
-    @Contextual @SerialName(value = "jetton")
+    @SerialName(value = "jetton")
     val jetton: io.ton.walletkit.model.TONUserFriendlyAddress,
 
-    @Contextual @SerialName(value = "owner")
+    @SerialName(value = "owner")
     val owner: io.ton.walletkit.model.TONUserFriendlyAddress,
 
 ) {

@@ -233,6 +233,11 @@ internal object ResponseConstants {
     const val KEY_SIGNED_BOC = "signedBoc"
 
     /**
+     * JSON key for sent transaction BOC returned by wallet.sendTransaction().
+     */
+    const val KEY_BOC = "boc"
+
+    /**
      * JSON key for URL parameter.
      */
     const val KEY_URL = "url"
@@ -320,6 +325,11 @@ internal object ResponseConstants {
      * JSON key for 'ok' status flag.
      */
     const val KEY_OK = "ok"
+
+    /**
+     * JSON key for provider identifier (swap).
+     */
+    const val KEY_PROVIDER_ID = "providerId"
 
     /**
      * JSON key for 'removed' status flag.
@@ -451,6 +461,11 @@ internal object ResponseConstants {
      * Value for 'request' message kind (JS→Kotlin reverse RPC).
      */
     const val VALUE_KIND_REQUEST = "request"
+
+    /**
+     * Value for 'call' message kind (Kotlin→JS forward RPC, replaces window.__walletkitCall).
+     */
+    const val VALUE_KIND_CALL = "call"
 
     /**
      * Schema type value for text data.

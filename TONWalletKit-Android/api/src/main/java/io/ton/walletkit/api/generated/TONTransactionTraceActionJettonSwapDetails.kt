@@ -53,7 +53,7 @@ data class TONTransactionTraceActionJettonSwapDetails(
     @SerialName(value = "peerSwaps")
     val peerSwaps: kotlin.collections.List<@Contextual kotlinx.serialization.json.JsonElement>,
 
-    @Contextual @SerialName(value = "sender")
+    @SerialName(value = "sender")
     val sender: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     @SerialName(value = "dexIncomingTransfer")

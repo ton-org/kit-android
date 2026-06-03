@@ -32,9 +32,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Request to send a transaction on the TON blockchain.
+ * Request to send a transaction on the TON blockchain. Contains `messages` or `items`. If items are present, but messages are not — wallet app is responsible for resolving items into messages.
  *
  * @param messages List of messages to include in the transaction
+ * @param items List of structured items (ton/jetton/nft) as an alternative to raw messages. When present, the wallet app is responsible for resolving items into messages.
  * @param network
  * @param validUntil Unix timestamp after which the transaction becomes invalid
  * @param fromAddress Sender wallet address in received format(raw, user friendly)
@@ -46,12 +47,16 @@ data class TONTransactionRequest(
     @SerialName(value = "messages")
     val messages: kotlin.collections.List<TONTransactionRequestMessage>,
 
+    /* List of structured items (ton/jetton/nft) as an alternative to raw messages. When present, the wallet app is responsible for resolving items into messages. */
+    @SerialName(value = "items")
+    val items: kotlin.collections.List<TONStructuredItem>? = null,
+
     @SerialName(value = "network")
     val network: TONNetwork? = null,
 
     /* Unix timestamp after which the transaction becomes invalid */
     @SerialName(value = "validUntil")
-    val validUntil: kotlin.Int? = null,
+    val validUntil: kotlin.Double? = null,
 
     /* Sender wallet address in received format(raw, user friendly) */
     @SerialName(value = "fromAddress")

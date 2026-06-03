@@ -22,6 +22,7 @@
 package io.ton.walletkit.engine.infrastructure
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
@@ -37,17 +38,22 @@ import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import io.ton.walletkit.WalletKitBridgeException
 import io.ton.walletkit.api.generated.TONDAppInfo
+import io.ton.walletkit.api.generated.TONNFTsRequest
 import io.ton.walletkit.api.generated.TONNetwork
 import io.ton.walletkit.api.generated.TONRawStackItem
+import io.ton.walletkit.api.generated.TONUserNFTsRequest
 import io.ton.walletkit.api.isTestnet
 import io.ton.walletkit.bridge.BuildConfig
+import io.ton.walletkit.bridge.optString
+import io.ton.walletkit.bridge.optStringOrNull
+import io.ton.walletkit.bridge.transport.BridgeTransport
+import io.ton.walletkit.bridge.transport.WebMessagePortBridgeTransport
 import io.ton.walletkit.client.TONAPIClient
 import io.ton.walletkit.config.SignDataType
 import io.ton.walletkit.config.TONWalletKitConfiguration
 import io.ton.walletkit.engine.state.AdapterManager
 import io.ton.walletkit.internal.constants.JsonConstants
 import io.ton.walletkit.internal.constants.LogConstants
-import io.ton.walletkit.internal.constants.MiscConstants
 import io.ton.walletkit.internal.constants.ResponseConstants
 import io.ton.walletkit.internal.constants.WebViewConstants
 import io.ton.walletkit.internal.util.Logger
@@ -56,20 +62,24 @@ import io.ton.walletkit.model.TONUserFriendlyAddress
 import io.ton.walletkit.session.SessionFilter
 import io.ton.walletkit.session.TONConnectSessionManager
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.json.JSONArray
-import org.json.JSONException
-import org.json.JSONObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Owns the WebView lifecycle, asset loading, and JavaScript bridge integration.
- *
- * The manager mirrors the legacy inline implementation to ensure behaviour (including logging)
- * remains unchanged while allowing the rest of the engine to interact through a focused API.
  *
  * @suppress Internal component. Use through [WebViewWalletKitEngine].
  */
@@ -78,10 +88,10 @@ internal class WebViewManager(
     private val assetPath: String,
     private val storageManager: StorageManager,
     private val sessionManager: TONConnectSessionManager?,
-    private val apiClients: List<TONAPIClient>,
+    private val apiClients: Map<TONNetwork, TONAPIClient>,
     private val adapterManager: AdapterManager,
     private val json: Json,
-    private val onMessage: (JSONObject) -> Unit,
+    private val onMessage: (JsonObject) -> Unit,
     private val onBridgeError: (WalletKitBridgeException, String?) -> Unit,
 ) {
     private val appContext = context.applicationContext
@@ -95,8 +105,10 @@ internal class WebViewManager(
     private lateinit var webView: WebView
 
     val webViewInitialized = CompletableDeferred<Unit>()
-    val bridgeLoaded = CompletableDeferred<Unit>()
-    val jsBridgeReady = CompletableDeferred<Unit>()
+
+    private lateinit var transportImpl: WebMessagePortBridgeTransport
+    val transport: BridgeTransport
+        get() = transportImpl
 
     init {
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -117,32 +129,13 @@ internal class WebViewManager(
 
     fun asView(): WebView = webView
 
-    suspend fun executeJavaScript(script: String) {
-        webViewInitialized.await()
-        withContext(Dispatchers.Main) {
-            webView.evaluateJavascript(script, null)
-        }
-    }
-
     fun destroy() {
         if (!::webView.isInitialized) return
+        if (::transportImpl.isInitialized) transportImpl.close()
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.removeJavascriptInterface(WebViewConstants.JS_INTERFACE_NAME)
         webView.stopLoading()
         webView.destroy()
-    }
-
-    fun startJsBridgeReadyPolling() {
-        if (jsBridgeReady.isCompleted) {
-            return
-        }
-        mainHandler.post { pollJsBridgeReady() }
-    }
-
-    fun markJsBridgeReady() {
-        if (!jsBridgeReady.isCompleted) {
-            jsBridgeReady.complete(Unit)
-        }
     }
 
     private fun initializeWebView() {
@@ -157,14 +150,29 @@ internal class WebViewManager(
             webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             webView.addJavascriptInterface(JsBinding(), WebViewConstants.JS_INTERFACE_NAME)
 
-            // Set WebChromeClient to suppress console logs in release builds
+            transportImpl = WebMessagePortBridgeTransport(
+                webView = webView,
+                mainHandler = mainHandler,
+                callbackHandler = mainHandler,
+            )
+            transportImpl.setOnMessage { jsonString ->
+                try {
+                    onMessage(json.parseToJsonElement(jsonString).jsonObject)
+                } catch (err: SerializationException) {
+                    Logger.e(TAG, "SerializationException: " + LogConstants.MSG_MALFORMED_PAYLOAD, err)
+                    onBridgeError(
+                        WalletKitBridgeException(LogConstants.ERROR_MALFORMED_PAYLOAD_PREFIX + err.message),
+                        jsonString,
+                    )
+                }
+            }
+
             webView.webChromeClient = object : WebChromeClient() {
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-                    // Only show console logs when logging is enabled
                     if (BuildConfig.LOG_LEVEL != "OFF") {
                         Logger.d(TAG, "[JS Console] ${consoleMessage.message()} (${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})")
                     }
-                    return true // Suppress default logging
+                    return true
                 }
             }
 
@@ -189,7 +197,7 @@ internal class WebViewManager(
                         }
                     }
 
-                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
                         Logger.d(TAG, "WebView page started loading: $url")
                     }
@@ -198,19 +206,21 @@ internal class WebViewManager(
                         super.onPageFinished(view, url)
                         Logger.d(TAG, "WebView page finished loading: $url")
 
-                        // Set log level for JavaScript bridge
-                        // Controls granular logging in the bridge JavaScript bundle
-                        // Levels: OFF, ERROR, WARN, INFO, DEBUG
-                        // Release: WARN (errors + warnings), Debug: DEBUG (everything)
                         val logLevel = BuildConfig.LOG_LEVEL
-                        view?.evaluateJavascript("window.__WALLETKIT_LOG_LEVEL__ = '$logLevel';") { result ->
+                        view?.evaluateJavascript("window.__WALLETKIT_LOG_LEVEL__ = '$logLevel';") {
                             Logger.d(TAG, "Log level set: __WALLETKIT_LOG_LEVEL__ = $logLevel")
                         }
 
-                        if (!bridgeLoaded.isCompleted) {
-                            bridgeLoaded.complete(Unit)
+                        try {
+                            transportImpl.handOffPortToJs()
+                        } catch (err: Throwable) {
+                            Logger.e(TAG, "Failed to hand off bridge port to JS", err)
+                            val exception = WalletKitBridgeException(
+                                "Failed to hand off bridge port: ${err.message}",
+                            )
+                            transportImpl.fail(exception)
+                            onBridgeError(exception, null)
                         }
-                        startJsBridgeReadyPolling()
                     }
 
                     override fun shouldInterceptRequest(
@@ -232,8 +242,7 @@ internal class WebViewManager(
         } catch (e: Exception) {
             Logger.e(TAG, MSG_FAILED_INITIALIZE_WEBVIEW, e)
             webViewInitialized.completeExceptionally(e)
-            bridgeLoaded.completeExceptionally(e)
-            jsBridgeReady.completeExceptionally(e)
+            if (::transportImpl.isInitialized) transportImpl.fail(e)
             onBridgeError(
                 WalletKitBridgeException(
                     WebViewConstants.ERROR_BUNDLE_LOAD_FAILED + MSG_OPEN_PAREN + (e.message ?: ResponseConstants.VALUE_UNKNOWN) + MSG_CLOSE_PAREN_PERIOD_SPACE + WebViewConstants.BUILD_INSTRUCTION,
@@ -243,55 +252,14 @@ internal class WebViewManager(
         }
     }
 
-    private fun pollJsBridgeReady() {
-        if (jsBridgeReady.isCompleted) {
-            return
-        }
-        try {
-            webView.evaluateJavascript(WebViewConstants.JS_BRIDGE_READY_CHECK) { result ->
-                val normalized = result?.trim()?.trim('"') ?: MiscConstants.EMPTY_STRING
-                if (normalized.equals(WebViewConstants.JS_BOOLEAN_TRUE, ignoreCase = true)) {
-                    markJsBridgeReady()
-                } else {
-                    mainHandler.postDelayed({ pollJsBridgeReady() }, WebViewConstants.JS_BRIDGE_POLL_DELAY_MS)
-                }
-            }
-        } catch (err: Throwable) {
-            Logger.e(TAG, MSG_FAILED_EVALUATE_JS_BRIDGE, err)
-            val safeMessage = err.message ?: ResponseConstants.VALUE_UNKNOWN
-            val exception =
-                WalletKitBridgeException(
-                    WebViewConstants.ERROR_BUNDLE_LOAD_FAILED + MSG_OPEN_PAREN + safeMessage + MSG_CLOSE_PAREN_PERIOD_SPACE + WebViewConstants.BUILD_INSTRUCTION,
-                )
-            failBridgeFutures(exception)
-            onBridgeError(exception, null)
-        }
-    }
-
     private fun failBridgeFutures(exception: WalletKitBridgeException) {
-        if (!bridgeLoaded.isCompleted) {
-            bridgeLoaded.completeExceptionally(exception)
-        }
-        if (!jsBridgeReady.isCompleted) {
-            jsBridgeReady.completeExceptionally(exception)
-        }
+        if (::transportImpl.isInitialized) transportImpl.fail(exception)
     }
 
     private inner class JsBinding {
         @JavascriptInterface
-        fun postMessage(json: String) {
-            try {
-                val payload = JSONObject(json)
-                onMessage(payload)
-            } catch (err: JSONException) {
-                Logger.e(TAG, "JSONException: " + LogConstants.MSG_MALFORMED_PAYLOAD, err)
-                onBridgeError(WalletKitBridgeException(LogConstants.ERROR_MALFORMED_PAYLOAD_PREFIX + err.message), json)
-            }
-        }
-
-        @JavascriptInterface
         fun storageGet(key: String): String? {
-            return kotlinx.coroutines.runBlocking {
+            return runBlocking {
                 storageManager.get(key)
             }
         }
@@ -301,45 +269,111 @@ internal class WebViewManager(
             key: String,
             value: String,
         ) {
-            kotlinx.coroutines.runBlocking {
+            runBlocking {
                 storageManager.set(key, value)
             }
         }
 
         @JavascriptInterface
         fun storageRemove(key: String) {
-            kotlinx.coroutines.runBlocking {
+            runBlocking {
                 storageManager.remove(key)
             }
         }
 
         @JavascriptInterface
         fun storageClear() {
-            kotlinx.coroutines.runBlocking {
+            runBlocking {
                 storageManager.clear()
             }
         }
 
         @JavascriptInterface
-        fun adapterCallSync(method: String, paramsJson: String): String = kotlinx.coroutines.runBlocking {
-            withTimeout(1000) {
-                val params = JSONObject(paramsJson)
-                val adapterId = params.getString("adapterId")
-                val adapter = adapterManager.getAdapter(adapterId)
-                    ?: throw IllegalArgumentException("Adapter not found: $adapterId")
-                when (method) {
-                    "getPublicKey" -> adapter.publicKey().value
-                    "getNetwork" -> JSONObject().apply { put("chainId", adapter.network().chainId) }.toString()
-                    "getAddress" -> adapter.address(adapter.network().isTestnet).value
-                    "getWalletId" -> adapter.identifier()
-                    "getSupportedFeatures" -> {
-                        val features = adapter.supportedFeatures()
-                            ?: return@withTimeout "null"
-                        featuresToJson(features).toString()
-                    }
-                    else -> throw IllegalArgumentException("Unknown sync adapter method: $method")
+        fun adapterCallSync(method: String, paramsJson: String): String = runBlocking {
+            try {
+                withTimeout(CALL_TIMEOUT_MS) {
+                    dispatch(method, json.parseToJsonElement(paramsJson).jsonObject)
                 }
+            } catch (e: Exception) {
+                Logger.e(TAG, "adapterCallSync($method) failed", e)
+                throw e
             }
+        }
+
+        private fun requireAdapter(params: JsonObject) =
+            adapterManager.getAdapter(params.optString("adapterId"))
+                ?: throw IllegalArgumentException("Adapter not found: ${params.optString("adapterId")}")
+
+        private suspend fun dispatch(method: String, params: JsonObject): String {
+            // Lazy so adapter-only calls (which carry no chainId) never trigger client resolution.
+            val client by lazy { clientForParams(params) }
+            return when (method) {
+                // ---- Wallet adapter (resolved per-wallet by adapterId) ----
+                "getPublicKey" -> requireAdapter(params).publicKey().value
+                "getNetwork" -> buildJsonObject { put("chainId", requireAdapter(params).network().chainId) }.toString()
+                "getAddress" -> requireAdapter(params).let { it.address(it.network().isTestnet).value }
+                "getWalletId" -> requireAdapter(params).identifier()
+                "getSupportedFeatures" ->
+                    requireAdapter(params).supportedFeatures()?.let { featuresToJson(it).toString() } ?: "null"
+
+                // ---- Network API client (resolved per-network by chainId) ----
+                "api.getNetworks" -> json.encodeToString(apiClients.keys.toList())
+                "api.sendBoc" -> client.sendBoc(TONBase64.parse(params.optString("boc")))
+                "api.runGetMethod" -> {
+                    val address = TONUserFriendlyAddress.parse(params.optString("address"))
+                    val methodName = params.optString("method")
+                    val stack = params["stack"]
+                        ?.takeIf { it !is JsonNull }
+                        ?.let { json.decodeFromJsonElement<List<TONRawStackItem>>(it) }
+                    val seqno = (params["seqno"] as? JsonPrimitive)?.content?.toUIntOrNull()
+                    json.encodeToString(client.runGetMethod(address, methodName, stack, seqno))
+                }
+                "api.getMasterchainInfo" -> json.encodeToString(client.getMasterchainInfo())
+                "api.getBalance" -> {
+                    val address = TONUserFriendlyAddress.parse(params.optString("address"))
+                    val seqno = (params["seqno"] as? JsonPrimitive)?.content?.toUIntOrNull()
+                    client.getBalance(address, seqno).value
+                }
+                "api.fetchEmulation" -> {
+                    val messageBoc = TONBase64.parse(params.optString("messageBoc"))
+                    val ignoreSignature = (params["ignoreSignature"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false
+                    json.encodeToString(client.fetchEmulation(messageBoc, ignoreSignature))
+                }
+                "api.getAccountState" -> {
+                    val address = TONUserFriendlyAddress.parse(params.optString("address"))
+                    val seqno = (params["seqno"] as? JsonPrimitive)?.content?.toUIntOrNull()
+                    json.encodeToString(client.accountState(address, seqno))
+                }
+                "api.getAccountStates" -> {
+                    val addresses = json.decodeFromJsonElement<List<String>>(
+                        params["addresses"] ?: throw IllegalArgumentException("api.getAccountStates: missing addresses"),
+                    ).map { TONUserFriendlyAddress.parse(it) }
+                    json.encodeToString(client.accountStates(addresses).mapKeys { it.key.value })
+                }
+                "api.nftItemsByAddress" -> {
+                    val request = json.decodeFromJsonElement<TONNFTsRequest>(
+                        params["request"] ?: throw IllegalArgumentException("api.nftItemsByAddress: missing request"),
+                    )
+                    json.encodeToString(client.nftItemsByAddress(request))
+                }
+                "api.nftItemsByOwner" -> {
+                    val request = json.decodeFromJsonElement<TONUserNFTsRequest>(
+                        params["request"] ?: throw IllegalArgumentException("api.nftItemsByOwner: missing request"),
+                    )
+                    json.encodeToString(client.nftItemsByOwner(request))
+                }
+                // DNS resolution returns null when unresolved; JS treats "" as undefined (`raw || undefined`).
+                "api.resolveDnsWallet" -> client.resolveDnsWallet(params.optString("domain")) ?: ""
+                "api.backResolveDnsWallet" ->
+                    client.backResolveDnsWallet(TONUserFriendlyAddress.parse(params.optString("address"))) ?: ""
+                else -> throw IllegalArgumentException("Unknown bridge method: $method")
+            }
+        }
+
+        private fun clientForParams(params: JsonObject): TONAPIClient {
+            val chainId = params.optString("chainId")
+            return apiClients[TONNetwork(chainId)]
+                ?: throw IllegalArgumentException("No API client configured for chainId=$chainId")
         }
 
         // ======== Session Manager Methods ========
@@ -360,16 +394,16 @@ internal class WebViewManager(
             val manager = sessionManager
                 ?: throw IllegalStateException("Session manager not configured")
 
-            return kotlinx.coroutines.runBlocking {
+            return runBlocking {
                 try {
                     Logger.d(TAG, "sessionCreate: sessionId=$sessionId, dAppInfo=$dAppInfoJson")
 
-                    val dAppInfoObj = JSONObject(dAppInfoJson)
+                    val dAppInfoObj = json.parseToJsonElement(dAppInfoJson).jsonObject
                     val dAppInfo = TONDAppInfo(
                         name = dAppInfoObj.optString("name", ""),
-                        url = dAppInfoObj.optNullableString("url"),
-                        iconUrl = dAppInfoObj.optNullableString("iconUrl"),
-                        description = dAppInfoObj.optNullableString("description"),
+                        url = dAppInfoObj.optStringOrNull("url"),
+                        iconUrl = dAppInfoObj.optStringOrNull("iconUrl"),
+                        description = dAppInfoObj.optStringOrNull("description"),
                     )
 
                     val session = manager.createSession(
@@ -393,7 +427,7 @@ internal class WebViewManager(
             val manager = sessionManager
                 ?: throw IllegalStateException("Session manager not configured")
 
-            return kotlinx.coroutines.runBlocking {
+            return runBlocking {
                 try {
                     Logger.d(TAG, "sessionGet: sessionId=$sessionId")
                     val session = manager.getSession(sessionId)
@@ -410,7 +444,7 @@ internal class WebViewManager(
             val manager = sessionManager
                 ?: throw IllegalStateException("Session manager not configured")
 
-            return kotlinx.coroutines.runBlocking {
+            return runBlocking {
                 try {
                     val filter = parseSessionFilter(filterJson)
                     val sessions = manager.getSessions(filter)
@@ -427,7 +461,7 @@ internal class WebViewManager(
             val manager = sessionManager
                 ?: throw IllegalStateException("Session manager not configured")
 
-            kotlinx.coroutines.runBlocking {
+            runBlocking {
                 try {
                     manager.removeSession(sessionId)
                 } catch (e: Exception) {
@@ -441,7 +475,7 @@ internal class WebViewManager(
             val manager = sessionManager
                 ?: throw IllegalStateException("Session manager not configured")
 
-            kotlinx.coroutines.runBlocking {
+            runBlocking {
                 try {
                     val filter = parseSessionFilter(filterJson)
                     manager.removeSessions(filter)
@@ -456,7 +490,7 @@ internal class WebViewManager(
             val manager = sessionManager
                 ?: throw IllegalStateException("Session manager not configured")
 
-            kotlinx.coroutines.runBlocking {
+            runBlocking {
                 try {
                     Logger.d(TAG, "sessionClear")
                     manager.clearSessions()
@@ -466,105 +500,18 @@ internal class WebViewManager(
             }
         }
 
-        // ======== API Client Methods ========
-        // These methods are only available when custom API clients are configured.
-        // The JS bridge checks for apiGetNetworks to determine if native API clients are available.
-
-        @JavascriptInterface
-        fun apiGetNetworks(): String {
-            if (apiClients.isEmpty()) {
-                return "[]"
-            }
-
-            val networks = apiClients.map { client ->
-                json.encodeToString(client.network)
-            }
-            return "[${ networks.joinToString(",") }]"
-        }
-
-        @JavascriptInterface
-        fun apiSendBoc(networkJson: String, boc: String): String {
-            val network = json.decodeFromString<TONNetwork>(networkJson)
-            val client = apiClients.find { it.network == network }
-                ?: throw IllegalArgumentException("No API client configured for network: $network")
-
-            return kotlinx.coroutines.runBlocking {
-                try {
-                    Logger.d(TAG, "apiSendBoc: network=$network")
-                    client.sendBoc(TONBase64(boc))
-                } catch (e: Exception) {
-                    Logger.e(TAG, "Failed to send BOC: $network", e)
-                    throw e
-                }
-            }
-        }
-
-        @JavascriptInterface
-        fun apiRunGetMethod(
-            networkJson: String,
-            address: String,
-            method: String,
-            stackJson: String?,
-            seqno: Int,
-        ): String {
-            val network = json.decodeFromString<TONNetwork>(networkJson)
-            val client = apiClients.find { it.network == network }
-                ?: throw IllegalArgumentException("No API client configured for network: $network")
-
-            return kotlinx.coroutines.runBlocking {
-                try {
-                    Logger.d(TAG, "apiRunGetMethod: network=$network, address=$address, method=$method")
-                    val stack = stackJson?.let { json.decodeFromString<List<TONRawStackItem>>(it) }
-                    val seqnoArg = if (seqno == -1) null else seqno
-                    val result = client.runGetMethod(TONUserFriendlyAddress(address), method, stack, seqnoArg)
-                    json.encodeToString(result)
-                } catch (e: Exception) {
-                    Logger.e(TAG, "Failed to run get method: $method on $address", e)
-                    throw e
-                }
-            }
-        }
-
-        @JavascriptInterface
-        fun apiGetBalance(
-            networkJson: String,
-            address: String,
-            seqno: Int,
-        ): String {
-            val network = json.decodeFromString<TONNetwork>(networkJson)
-            val client = apiClients.find { it.network == network }
-                ?: throw IllegalArgumentException("No API client configured for network: $network")
-
-            return kotlinx.coroutines.runBlocking {
-                try {
-                    Logger.d(TAG, "apiGetBalance: network=$network, address=$address")
-                    val seqnoArg = if (seqno == -1) null else seqno
-                    client.getBalance(TONUserFriendlyAddress(address), seqnoArg)
-                } catch (e: Exception) {
-                    Logger.e(TAG, "Failed to get balance for: $address", e)
-                    throw e
-                }
-            }
-        }
-
-        private fun JSONObject.optNullableString(key: String): String? {
-            val value = opt(key)
-            return when (value) {
-                null, JSONObject.NULL -> null
-                else -> value.toString()
-            }
-        }
-
         private fun parseSessionFilter(filterJson: String): SessionFilter? {
             return try {
-                val jsonObj = org.json.JSONObject(filterJson)
-                if (jsonObj.length() == 0) {
+                val jsonObj = json.parseToJsonElement(filterJson).jsonObject
+                if (jsonObj.isEmpty()) {
                     null
                 } else {
                     SessionFilter(
-                        walletId = jsonObj.optNullableString("walletId"),
-                        domain = jsonObj.optNullableString("domain"),
-                        isJsBridge = if (jsonObj.has("isJsBridge")) jsonObj.getBoolean("isJsBridge") else null,
+                        walletId = jsonObj.optStringOrNull("walletId"),
+                        domain = jsonObj.optStringOrNull("domain"),
+                        isJsBridge = (jsonObj["isJsBridge"] as? kotlinx.serialization.json.JsonPrimitive)?.let {
+                            it.content.toBooleanStrictOrNull()
+                        },
                     )
                 }
             } catch (e: Exception) {
@@ -573,13 +520,13 @@ internal class WebViewManager(
             }
         }
 
-        private fun featuresToJson(features: List<TONWalletKitConfiguration.Feature>): JSONArray {
-            return JSONArray().apply {
+        private fun featuresToJson(features: List<TONWalletKitConfiguration.Feature>): JsonArray =
+            buildJsonArray {
                 for (feature in features) {
                     when (feature) {
                         is TONWalletKitConfiguration.SendTransactionFeature -> {
-                            put(
-                                JSONObject().apply {
+                            add(
+                                buildJsonObject {
                                     put(JsonConstants.KEY_NAME, JsonConstants.FEATURE_SEND_TRANSACTION)
                                     feature.maxMessages?.let { put(JsonConstants.KEY_MAX_MESSAGES, it) }
                                     feature.extraCurrencySupported?.let { put("extraCurrencySupported", it) }
@@ -587,14 +534,14 @@ internal class WebViewManager(
                             )
                         }
                         is TONWalletKitConfiguration.SignDataFeature -> {
-                            put(
-                                JSONObject().apply {
+                            add(
+                                buildJsonObject {
                                     put(JsonConstants.KEY_NAME, JsonConstants.FEATURE_SIGN_DATA)
                                     put(
                                         JsonConstants.KEY_TYPES,
-                                        JSONArray().apply {
+                                        buildJsonArray {
                                             for (type in feature.types) {
-                                                put(
+                                                add(
                                                     when (type) {
                                                         SignDataType.TEXT -> JsonConstants.VALUE_SIGN_DATA_TEXT
                                                         SignDataType.BINARY -> JsonConstants.VALUE_SIGN_DATA_BINARY
@@ -610,11 +557,12 @@ internal class WebViewManager(
                     }
                 }
             }
-        }
     }
 
     private companion object {
         private const val TAG = LogConstants.TAG_WEBVIEW_ENGINE
+
+        private const val CALL_TIMEOUT_MS = 1000L
         private const val MSG_FAILED_INITIALIZE_WEBVIEW = "Failed to initialize WebView"
         private const val MSG_FAILED_EVALUATE_JS_BRIDGE = "Failed to evaluate JS bridge readiness"
         private const val MSG_URL_SEPARATOR = " url="

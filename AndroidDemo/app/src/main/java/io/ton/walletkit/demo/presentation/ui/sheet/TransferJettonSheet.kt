@@ -43,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import io.ton.walletkit.demo.designsystem.theme.TonTheme
 import io.ton.walletkit.demo.presentation.model.JettonDetails
 import io.ton.walletkit.demo.presentation.util.JettonFormatters
 import java.math.BigDecimal
@@ -68,7 +70,12 @@ fun TransferJettonSheet(
     onTransfer: (recipient: String, amount: String, comment: String) -> Unit,
     isLoading: Boolean = false,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        // Block swipe-down / scrim-drag dismissal — scrolling a long jetton-transfer form
+        // shouldn't close it. Only the explicit close button triggers [onDismiss].
+        confirmValueChange = { it != SheetValue.Hidden },
+    )
     var recipient by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var comment by remember { mutableStateOf("") }
@@ -76,6 +83,7 @@ fun TransferJettonSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        containerColor = TonTheme.colors.bgPrimary,
     ) {
         Column(
             modifier = Modifier

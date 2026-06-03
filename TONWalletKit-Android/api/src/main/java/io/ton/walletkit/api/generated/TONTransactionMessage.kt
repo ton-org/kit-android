@@ -62,10 +62,10 @@ data class TONTransactionMessage(
     @Contextual @SerialName(value = "normalizedHash")
     val normalizedHash: io.ton.walletkit.model.TONHex? = null,
 
-    @Contextual @SerialName(value = "source")
+    @SerialName(value = "source")
     val source: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
-    @Contextual @SerialName(value = "destination")
+    @SerialName(value = "destination")
     val destination: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     @SerialName(value = "value")
@@ -83,7 +83,7 @@ data class TONTransactionMessage(
 
     /* The timestamp when the message was created */
     @SerialName(value = "createdAt")
-    val createdAt: kotlin.Int? = null,
+    val createdAt: kotlin.Double? = null,
 
     /* The opcode included in the message payload */
     @SerialName(value = "opcode")

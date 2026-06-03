@@ -29,7 +29,6 @@
 package io.ton.walletkit.api.generated
 
 import io.ton.walletkit.model.TONUserFriendlyAddress
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -51,6 +50,7 @@ import kotlinx.serialization.Serializable
  * @param traceId
  * @param dAppInfo
  * @param returnStrategy Raw TonConnect return strategy string.
+ * @param embeddedRequest
  */
 @Serializable
 data class TONConnectionRequestEvent(
@@ -69,7 +69,7 @@ data class TONConnectionRequestEvent(
     @SerialName(value = "from")
     var from: kotlin.String? = null,
 
-    @Contextual @SerialName(value = "walletAddress")
+    @SerialName(value = "walletAddress")
     val walletAddress: io.ton.walletkit.model.TONUserFriendlyAddress? = null,
 
     /* Wallet identifier associated with the event */
@@ -107,6 +107,9 @@ data class TONConnectionRequestEvent(
     /* Raw TonConnect return strategy string. */
     @SerialName(value = "returnStrategy")
     val returnStrategy: kotlin.String? = null,
+
+    @SerialName(value = "embeddedRequest")
+    val embeddedRequest: TONEmbeddedRequest? = null,
 
 ) {
 

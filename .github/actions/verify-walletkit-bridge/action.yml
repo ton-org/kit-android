@@ -1,0 +1,97 @@
+name: Verify WalletKit bridge bundle
+description: >
+  Build the WalletKit Android bridge from the pinned kit tag (WALLETKIT_BRIDGE_TAG in
+  gradle.properties) and verify the committed bundle matches it byte-for-byte. The bridge is
+  treated as a pinned dependency: you bump the tag, rebuild, and commit by hand — this guards
+  that the committed bundle is exactly what building that tag produces.
+
+inputs:
+  repo:
+    description: kit monorepo that contains the bridge source
+    default: ton-org/kit
+  gradle-properties:
+    description: Path to gradle.properties holding WALLETKIT_BRIDGE_TAG
+    default: TONWalletKit-Android/gradle.properties
+  assets-dir:
+    description: Path to the committed WalletKit WebView assets
+    default: TONWalletKit-Android/impl/src/main/assets/walletkit
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve pinned bridge tag
+      id: tag
+      shell: bash
+      run: |
+        TAG=$(grep -E '^WALLETKIT_BRIDGE_TAG=' "${{ inputs.gradle-properties }}" | cut -d= -f2 | tr -d '[:space:]')
+        if [ -z "$TAG" ]; then
+          echo "::error::WALLETKIT_BRIDGE_TAG is not set in ${{ inputs.gradle-properties }}"
+          exit 1
+        fi
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "Pinned bridge tag: $TAG"
+
+    - name: Checkout kit @ pinned tag
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repo }}
+        ref: ${{ steps.tag.outputs.tag }}
+        path: .kit-bridge
+
+    # Match kit's release.yml toolchain (pnpm + Node 24) so the bundle reproduces byte-for-byte.
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        package_json_file: .kit-bridge/package.json
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: .kit-bridge/pnpm-lock.yaml
+
+    - name: Build the bridge from source
+      shell: bash
+      working-directory: .kit-bridge
+      run: |
+        set -euo pipefail
+        pnpm install --frozen-lockfile
+        pnpm exec turbo run build --filter=walletkit-android-bridge
+
+    - name: Verify committed bundle matches the build
+      shell: bash
+      run: |
+        set -euo pipefail
+        TAG="${{ steps.tag.outputs.tag }}"
+        BUILT=.kit-bridge/packages/walletkit-android-bridge/dist
+        if [ ! -d "$BUILT" ]; then
+          echo "::error::build did not produce $BUILT"
+          exit 1
+        fi
+
+        # Runtime files only (sourcemaps are intentionally not verified).
+        FAIL=0
+        for f in walletkit-android-bridge.mjs inject.mjs index.html; do
+          built_path="$BUILT/$f"
+          committed_path="${{ inputs.assets-dir }}/$f"
+          if [ ! -f "$built_path" ]; then
+            echo "::error::$f was not produced by the build"; FAIL=1; continue
+          fi
+          if [ ! -f "$committed_path" ]; then
+            echo "::error::$f is missing from committed assets ($committed_path)"; FAIL=1; continue
+          fi
+          if diff -q "$built_path" "$committed_path" >/dev/null; then
+            echo "✓ $f matches the build of $TAG"
+          else
+            echo "::error::$f differs from a fresh build of $TAG:"
+            diff -u "$committed_path" "$built_path" | head -40 || true
+            FAIL=1
+          fi
+        done
+
+        if [ "$FAIL" -ne 0 ]; then
+          echo "::error::Committed WalletKit bridge bundle does not match a build of $TAG. Bump WALLETKIT_BRIDGE_TAG and rebuild + recommit the bundle (or fix the drift)."
+          exit 1
+        fi
+        echo "✅ Committed bridge bundle matches a fresh build of $TAG"

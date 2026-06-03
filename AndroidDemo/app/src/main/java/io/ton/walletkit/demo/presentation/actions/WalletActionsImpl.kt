@@ -27,6 +27,7 @@ import io.ton.walletkit.demo.presentation.model.ConnectRequestUi
 import io.ton.walletkit.demo.presentation.model.JettonDetails
 import io.ton.walletkit.demo.presentation.model.JettonSummary
 import io.ton.walletkit.demo.presentation.model.SignDataRequestUi
+import io.ton.walletkit.demo.presentation.model.SignMessageRequestUi
 import io.ton.walletkit.demo.presentation.model.TransactionRequestUi
 import io.ton.walletkit.demo.presentation.model.WalletSummary
 import io.ton.walletkit.demo.presentation.viewmodel.WalletKitViewModel
@@ -43,6 +44,8 @@ class WalletActionsImpl @Inject constructor(
 
     override fun onAddWalletClick() = viewModel.openAddWalletSheet()
 
+    override fun onStartCreateWalletFlow() = viewModel.showCreateWalletOnboarding()
+
     override fun onUrlPromptClick() = viewModel.showUrlPrompt()
 
     override fun onOpenBrowser(url: String, injectTonConnect: Boolean) = viewModel.openBrowser(url, injectTonConnect)
@@ -54,6 +57,8 @@ class WalletActionsImpl @Inject constructor(
     override fun onWalletDetails(address: String) = viewModel.showWalletDetails(address)
 
     override fun onSendFromWallet(address: String) = viewModel.openSendTransactionSheet(address)
+
+    override fun onStakeFromWallet(address: String) = viewModel.openStakingSheet(address)
 
     override fun onDisconnectSession(sessionId: String) = viewModel.disconnectSession(sessionId)
 
@@ -93,6 +98,10 @@ class WalletActionsImpl @Inject constructor(
 
     override fun onRejectSignData(request: SignDataRequestUi) = viewModel.rejectSignData(request)
 
+    override fun onApproveSignMessage(request: SignMessageRequestUi) = viewModel.approveSignMessage(request)
+
+    override fun onRejectSignMessage(request: SignMessageRequestUi) = viewModel.rejectSignMessage(request)
+
     override fun onConfirmSignerApproval() = viewModel.confirmSignerApproval()
 
     override fun onCancelSignerApproval() = viewModel.cancelSignerApproval()
@@ -126,4 +135,6 @@ class WalletActionsImpl @Inject constructor(
     override fun onLoadMoreJettons() = viewModel.loadMoreJettons()
 
     override fun onRefreshJettons() = viewModel.refreshJettons()
+
+    override fun onSwapClick() = viewModel.openSwapSheet()
 }
