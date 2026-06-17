@@ -34,6 +34,8 @@ import io.ton.walletkit.api.generated.TONGaslessQuoteParams
 import io.ton.walletkit.api.generated.TONGaslessSendParams
 import io.ton.walletkit.api.generated.TONGaslessSendResponse
 import io.ton.walletkit.api.generated.TONGetMethodResult
+import io.ton.walletkit.api.generated.TONJetton
+import io.ton.walletkit.api.generated.TONJettonInfo
 import io.ton.walletkit.api.generated.TONJettonsResponse
 import io.ton.walletkit.api.generated.TONJettonsTransferRequest
 import io.ton.walletkit.api.generated.TONMasterchainInfo
@@ -641,6 +643,22 @@ internal interface WalletKitEngine : RequestHandler {
     suspend fun getGaslessQuote(params: TONGaslessQuoteParams, providerId: String?): TONGaslessQuote
 
     suspend fun gaslessSendTransaction(params: TONGaslessSendParams, providerId: String?): TONGaslessSendResponse
+
+    // ── Jettons (kit-level manager) ──
+
+    /** Resolve jetton-master metadata by address. Returns null when the master is unknown. */
+    suspend fun jettonInfo(address: String, network: TONNetwork): TONJettonInfo?
+
+    /** List the jettons held by a user address, paginated. */
+    suspend fun addressJettons(
+        userAddress: String,
+        network: TONNetwork,
+        offset: Int,
+        limit: Int,
+    ): List<TONJetton>
+
+    /** Validate that a string is a well-formed jetton address. */
+    suspend fun validateJettonAddress(address: String): Boolean
 
     // ── Staking ──
 

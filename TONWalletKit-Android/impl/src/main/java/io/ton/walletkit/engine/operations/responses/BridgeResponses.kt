@@ -98,6 +98,9 @@ internal data class ProviderIdsResponse(val providerIds: List<String> = emptyLis
 internal data class HasProviderResponse(val result: Boolean = false)
 
 @Serializable
+internal data class ValidateJettonAddressResponse(val valid: Boolean = false)
+
+@Serializable
 internal data class SupportedNetworksResponse(
     val networks: List<io.ton.walletkit.api.generated.TONNetwork> = emptyList(),
 )

@@ -33573,7 +33573,7 @@ var init_JettonsManager = __esmMin((() => {
 						decimals = 9;
 					}
 					const result = {
-						address: jetton.jetton,
+						address: jetton.address,
 						name: tokenInfo?.name ?? "",
 						symbol: tokenInfo?.symbol ?? "",
 						description: tokenInfo?.description ?? "",
@@ -40237,7 +40237,7 @@ async function removeEventListeners() {
 */
 async function mnemonicToKeyPair(args) {
 	if (!MnemonicToKeyPair) throw new Error("MnemonicToKeyPair module not loaded");
-	return MnemonicToKeyPair(args.mnemonic, args.mnemonicType ?? "ton");
+	return MnemonicToKeyPair(args.mnemonic, args.mnemonicType);
 }
 async function sign(args) {
 	if (!DefaultSignature) throw new Error("DefaultSignature module not loaded");
@@ -40308,7 +40308,7 @@ var ProxyWalletAdapter = class {
 		const result = await bridgeRequest("adapterSignTransaction", {
 			adapterId: this.adapterId,
 			input: JSON.stringify(input),
-			fakeSignature: options?.fakeSignature ?? false
+			fakeSignature: options?.fakeSignature
 		});
 		if (!result) throw new Error("adapterSignTransaction: no result from native");
 		return result;
@@ -40320,7 +40320,7 @@ var ProxyWalletAdapter = class {
 		const result = await bridgeRequest("adapterSignData", {
 			adapterId: this.adapterId,
 			input: JSON.stringify(input),
-			fakeSignature: options?.fakeSignature ?? false
+			fakeSignature: options?.fakeSignature
 		});
 		if (!result) throw new Error("adapterSignData: no result from native");
 		return result;
@@ -40329,7 +40329,7 @@ var ProxyWalletAdapter = class {
 		const result = await bridgeRequest("adapterSignTonProof", {
 			adapterId: this.adapterId,
 			input: JSON.stringify(input),
-			fakeSignature: options?.fakeSignature ?? false
+			fakeSignature: options?.fakeSignature
 		});
 		if (!result) throw new Error("adapterSignTonProof: no result from native");
 		return result;
@@ -40377,13 +40377,13 @@ async function getWalletStateInit(args) {
 	return wallet(args.walletId, "getStateInit");
 }
 async function getSignedSendTransaction(args) {
-	return wallet(args.walletId, "getSignedSendTransaction", args.input, { fakeSignature: args.fakeSignature ?? false });
+	return wallet(args.walletId, "getSignedSendTransaction", args.input, { fakeSignature: args.fakeSignature });
 }
 async function getSignedSignData(args) {
-	return wallet(args.walletId, "getSignedSignData", args.input, { fakeSignature: args.fakeSignature ?? false });
+	return wallet(args.walletId, "getSignedSignData", args.input, { fakeSignature: args.fakeSignature });
 }
 async function getSignedTonProof(args) {
-	return wallet(args.walletId, "getSignedTonProof", args.input, { fakeSignature: args.fakeSignature ?? false });
+	return wallet(args.walletId, "getSignedTonProof", args.input, { fakeSignature: args.fakeSignature });
 }
 async function removeWallet(args) {
 	return kit("removeWallet", args.walletId);
@@ -40393,7 +40393,7 @@ async function getBalance(args) {
 }
 async function createSignerFromMnemonic(args) {
 	if (!Signer) throw new Error("Signer module not loaded");
-	const signer = await Signer.fromMnemonic(args.mnemonic, { type: args.mnemonicType ?? "ton" });
+	const signer = await Signer.fromMnemonic(args.mnemonic, { type: args.mnemonicType });
 	return {
 		signerId: retain("signer", signer),
 		publicKey: signer.publicKey
@@ -40434,7 +40434,7 @@ async function createV5R1WalletAdapter(args) {
 	const adapter = await WalletV5R1Adapter.create(signer, {
 		client: instance.getApiClient(network),
 		network,
-		workchain: args.workchain ?? 0,
+		workchain: args.workchain,
 		walletId: args.walletId,
 		domain: args.domain
 	});
@@ -40452,7 +40452,7 @@ async function createV4R2WalletAdapter(args) {
 	const adapter = await WalletV4R2Adapter.create(signer, {
 		client: instance.getApiClient(network),
 		network,
-		workchain: args.workchain ?? 0,
+		workchain: args.workchain,
 		walletId: args.walletId,
 		domain: args.domain
 	});
@@ -40602,17 +40602,19 @@ var createTransferNftTransaction = (args) => walletCall("createTransferNftTransa
 var createTransferNftRawTransaction = (args) => walletCall("createTransferNftRawTransaction", args);
 //#endregion
 //#region src/api/jettons.ts
-/**
-* Copyright (c) TonTech.
-*
-* This source code is licensed under the MIT license found in the
-* LICENSE file in the root directory of this source tree.
-*
-*/
 var getJettons = (args) => walletCall("getJettons", args);
 var createTransferJettonTransaction = (args) => walletCall("createTransferJettonTransaction", args);
 var getJettonBalance = (args) => walletCall("getJettonBalance", args);
 var getJettonWalletAddress = (args) => walletCall("getJettonWalletAddress", args);
+async function getJettonInfo(args) {
+	return (await getKit()).jettons.getJettonInfo(args.address, args.network);
+}
+async function getAddressJettons(args) {
+	return (await getKit()).jettons.getAddressJettons(args.userAddress, args.network, args.offset, args.limit);
+}
+async function validateJettonAddress(args) {
+	return { valid: (await getKit()).jettons.validateJettonAddress(args.address) };
+}
 //#endregion
 //#region ../walletkit/dist/esm/defi/staking/tonstakers/constants.js
 init_models();
@@ -46242,6 +46244,9 @@ var api = {
 	createTransferJettonTransaction,
 	getJettonBalance,
 	getJettonWalletAddress,
+	getJettonInfo,
+	getAddressJettons,
+	validateJettonAddress,
 	emitBrowserPageStarted,
 	emitBrowserPageFinished,
 	emitBrowserError,
