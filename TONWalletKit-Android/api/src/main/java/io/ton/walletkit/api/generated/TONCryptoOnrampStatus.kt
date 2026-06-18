@@ -32,24 +32,21 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Discriminator for DeFi-style providers (swap quotes, staking, gasless relayers, crypto onramp).
+ * Deposit details returned by a crypto onramp provider.  The user must send `amount` of `sourceCurrencyAddress` to `address` on `sourceChain` to complete the onramp; the provider then delivers the target crypto to the user's TON address.
  *
- * Values: swap,staking,gasless,cryptoMinusOnramp
+ * Values: success,pending,failed
  */
 @Serializable
-enum class TONDefiProviderType(val value: kotlin.String) {
+enum class TONCryptoOnrampStatus(val value: kotlin.String) {
 
-    @SerialName(value = "swap")
-    swap("swap"),
+    @SerialName(value = "success")
+    success("success"),
 
-    @SerialName(value = "staking")
-    staking("staking"),
+    @SerialName(value = "pending")
+    pending("pending"),
 
-    @SerialName(value = "gasless")
-    gasless("gasless"),
-
-    @SerialName(value = "crypto-onramp")
-    cryptoMinusOnramp("crypto-onramp"),
+    @SerialName(value = "failed")
+    failed("failed"),
     ;
 
     /**
@@ -65,12 +62,12 @@ enum class TONDefiProviderType(val value: kotlin.String) {
         /**
          * Converts the provided [data] to a [String] on success, null otherwise.
          */
-        fun encode(data: kotlin.Any?): kotlin.String? = if (data is TONDefiProviderType) "$data" else null
+        fun encode(data: kotlin.Any?): kotlin.String? = if (data is TONCryptoOnrampStatus) "$data" else null
 
         /**
-         * Returns a valid [TONDefiProviderType] for [data], null otherwise.
+         * Returns a valid [TONCryptoOnrampStatus] for [data], null otherwise.
          */
-        fun decode(data: kotlin.Any?): TONDefiProviderType? = data?.let {
+        fun decode(data: kotlin.Any?): TONCryptoOnrampStatus? = data?.let {
             val normalizedData = "$it".lowercase()
             values().firstOrNull { value ->
                 it == value || normalizedData == "$value".lowercase()

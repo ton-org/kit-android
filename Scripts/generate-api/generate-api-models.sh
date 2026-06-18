@@ -225,6 +225,54 @@ def normalize_screaming_snake_type_names():
 
 normalize_screaming_snake_type_names()
 
+# Backfill generic property type references the upstream spec generator omits. A property whose
+# `$ref` targets a generic model (one carrying `x-generic-params`) must itself carry
+# `x-generic-type-ref` so the Kotlin template emits the type argument
+# (e.g. `quote: TONCryptoOnrampQuote<TQuoteMetadata>`); without it the property renders as the bare
+# generic class and fails to compile. The owning class's type params not already claimed by a
+# sibling `x-generic-type-ref` are assigned in declaration order. The "TON" prefix mirrors
+# modelNamePrefix in generate-api-models-config.json. Mutates the rewritten `data` (see
+# add_inheritance). No-op once upstream emits the extension directly.
+def backfill_generic_type_refs():
+    out_schemas = data.get("components", {}).get("schemas", {}) or {}
+    arity = {
+        name: len(sc["x-generic-params"])
+        for name, sc in out_schemas.items()
+        if isinstance(sc, dict) and sc.get("x-generic-params")
+    }
+    if not arity:
+        return
+    for sc in out_schemas.values():
+        if not isinstance(sc, dict):
+            continue
+        params = [p.get("name") for p in (sc.get("x-generic-params") or []) if isinstance(p, dict)]
+        if not params:
+            continue
+        props = sc.get("properties") or {}
+        claimed = {
+            pd["x-generic-type-ref"]
+            for pd in props.values()
+            if isinstance(pd, dict) and isinstance(pd.get("x-generic-type-ref"), str)
+        }
+        free = [p for p in params if p not in claimed]
+        for pd in props.values():
+            if not isinstance(pd, dict) or "x-generic-type-ref" in pd:
+                continue
+            ref = pd.get("$ref")
+            target = ref.rsplit("/", 1)[-1] if isinstance(ref, str) else None
+            if target not in arity:
+                continue
+            args = free[:arity[target]]
+            if len(args) != arity[target]:
+                continue
+            del free[:len(args)]
+            # OpenAPI 3.0 ignores keywords sibling to `$ref`, so move the ref under `allOf` to keep
+            # the extension live while still resolving the referenced model.
+            pd["allOf"] = [{"$ref": pd.pop("$ref")}]
+            pd["x-generic-type-ref"] = "TON%s<%s>" % (target, ", ".join(args))
+
+backfill_generic_type_refs()
+
 with open(target, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
 PY
