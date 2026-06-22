@@ -33747,6 +33747,15 @@ var init_SwapProvider = __esmMin((() => {
 }));
 //#endregion
 //#region ../walletkit/dist/esm/defi/errors.js
+/**
+* Guarantees a typed error: returns `error` unchanged when it already is a {@link DefiError}
+* (including subclasses like `SwapError`, `StakingError`, etc.), otherwise wraps it in a
+* `DefiError` with the {@link DefiErrorCode.Unknown} code. Use in manager catch blocks so the
+* public API always throws a `DefiError`.
+*/
+function toDefiError(error, message) {
+	return error instanceof DefiError ? error : new DefiError(message, DefiErrorCode.Unknown, error);
+}
 var DefiErrorCode, DefiError;
 var init_errors$4 = __esmMin((() => {
 	(function(DefiErrorCode) {
@@ -33756,6 +33765,7 @@ var init_errors$4 = __esmMin((() => {
 		DefiErrorCode["UnsupportedNetwork"] = "UNSUPPORTED_NETWORK";
 		DefiErrorCode["InvalidParams"] = "INVALID_PARAMS";
 		DefiErrorCode["InvalidProvider"] = "INVALID_PROVIDER";
+		DefiErrorCode["Unknown"] = "UNKNOWN";
 	})(DefiErrorCode || (DefiErrorCode = {}));
 	DefiError = class extends Error {
 		code;
@@ -33765,27 +33775,6 @@ var init_errors$4 = __esmMin((() => {
 			this.name = "DefiError";
 			this.code = code;
 			this.details = details;
-		}
-	};
-}));
-//#endregion
-//#region ../walletkit/dist/esm/defi/swap/errors.js
-var SwapErrorCode, SwapError;
-var init_errors$3 = __esmMin((() => {
-	init_errors$4();
-	(function(SwapErrorCode) {
-		SwapErrorCode["InvalidQuote"] = "INVALID_QUOTE";
-		SwapErrorCode["InsufficientLiquidity"] = "INSUFFICIENT_LIQUIDITY";
-		SwapErrorCode["QuoteExpired"] = "QUOTE_EXPIRED";
-		SwapErrorCode["BuildTxFailed"] = "BUILD_TX_FAILED";
-		SwapErrorCode["NetworkError"] = "NETWORK_ERROR";
-	})(SwapErrorCode || (SwapErrorCode = {}));
-	SwapError = class extends DefiError {
-		code;
-		constructor(message, code, details) {
-			super(message, code, details);
-			this.name = "SwapError";
-			this.code = code;
 		}
 	};
 }));
@@ -33814,7 +33803,7 @@ var init_DefiManager = __esmMin((() => {
 		registerProvider(input) {
 			const provider = resolveProvider(input, this.createFactoryContext());
 			const providerId = provider.providerId;
-			if (!providerId) throw this.createError("Provider must have a providerId", DefiErrorCode.InvalidProvider);
+			if (!providerId) throw new DefiError("Provider must have a providerId", DefiErrorCode.InvalidProvider);
 			const oldProvider = this.providers.find((p) => p.providerId === providerId);
 			if (oldProvider) this.removeProvider(oldProvider);
 			this.providers = [...this.providers, provider];
@@ -33846,7 +33835,7 @@ var init_DefiManager = __esmMin((() => {
 		*/
 		setDefaultProvider(providerId) {
 			const provider = this.providers.find((p) => p.providerId === providerId);
-			if (!provider) throw this.createError(`Provider '${providerId}' not found`, DefiErrorCode.ProviderNotFound, {
+			if (!provider) throw new DefiError(`Provider '${providerId}' not found`, DefiErrorCode.ProviderNotFound, {
 				provider: providerId,
 				registered: this.providers.map((p) => p.providerId)
 			});
@@ -33864,9 +33853,9 @@ var init_DefiManager = __esmMin((() => {
 		*/
 		getProvider(providerId) {
 			const providerName = providerId || this.defaultProviderId;
-			if (!providerName) throw this.createError("No default provider set. Register a provider first.", DefiErrorCode.NoDefaultProvider);
+			if (!providerName) throw new DefiError("No default provider set. Register a provider first.", DefiErrorCode.NoDefaultProvider);
 			const provider = this.providers.find((p) => p.providerId === providerName);
-			if (!provider) throw this.createError(`Provider '${providerName}' not found`, DefiErrorCode.ProviderNotFound, {
+			if (!provider) throw new DefiError(`Provider '${providerName}' not found`, DefiErrorCode.ProviderNotFound, {
 				provider: providerName,
 				registered: this.providers.map((p) => p.providerId)
 			});
@@ -33894,9 +33883,9 @@ var init_DefiManager = __esmMin((() => {
 //#region ../walletkit/dist/esm/defi/swap/SwapManager.js
 var log$21, SwapManager;
 var init_SwapManager = __esmMin((() => {
-	init_errors$3();
 	init_Logger();
 	init_DefiManager();
+	init_errors$4();
 	log$21 = globalLogger.createChild("SwapManager");
 	SwapManager = class extends DefiManager {
 		constructor(createFactoryContext) {
@@ -33929,7 +33918,7 @@ var init_SwapManager = __esmMin((() => {
 					error,
 					params
 				});
-				throw error;
+				throw toDefiError(error, "Failed to get swap quote");
 			}
 		}
 		/**
@@ -33952,11 +33941,29 @@ var init_SwapManager = __esmMin((() => {
 					error,
 					params
 				});
-				throw error;
+				throw toDefiError(error, "Failed to build swap transaction");
 			}
 		}
-		createError(message, code, details) {
-			return new SwapError(message, code, details);
+	};
+}));
+//#endregion
+//#region ../walletkit/dist/esm/defi/swap/errors.js
+var SwapErrorCode, SwapError;
+var init_errors$3 = __esmMin((() => {
+	init_errors$4();
+	(function(SwapErrorCode) {
+		SwapErrorCode["InvalidQuote"] = "INVALID_QUOTE";
+		SwapErrorCode["InsufficientLiquidity"] = "INSUFFICIENT_LIQUIDITY";
+		SwapErrorCode["QuoteExpired"] = "QUOTE_EXPIRED";
+		SwapErrorCode["BuildTxFailed"] = "BUILD_TX_FAILED";
+		SwapErrorCode["NetworkError"] = "NETWORK_ERROR";
+	})(SwapErrorCode || (SwapErrorCode = {}));
+	SwapError = class extends DefiError {
+		code;
+		constructor(message, code, details) {
+			super(message, code, details);
+			this.name = "SwapError";
+			this.code = code;
 		}
 	};
 }));
@@ -33980,30 +33987,12 @@ var init_StakingProvider = __esmMin((() => {
 	};
 }));
 //#endregion
-//#region ../walletkit/dist/esm/defi/staking/errors.js
-var StakingErrorCode, StakingError;
-var init_errors$2 = __esmMin((() => {
-	init_errors$4();
-	(function(StakingErrorCode) {
-		StakingErrorCode["InvalidParams"] = "INVALID_PARAMS";
-		StakingErrorCode["UnsupportedOperation"] = "UNSUPPORTED_OPERATION";
-	})(StakingErrorCode || (StakingErrorCode = {}));
-	StakingError = class extends DefiError {
-		code;
-		constructor(message, code, details) {
-			super(message, code, details);
-			this.name = "StakingError";
-			this.code = code;
-		}
-	};
-}));
-//#endregion
 //#region ../walletkit/dist/esm/defi/staking/StakingManager.js
 var log$20, StakingManager;
 var init_StakingManager = __esmMin((() => {
-	init_errors$2();
 	init_Logger();
 	init_DefiManager();
+	init_errors$4();
 	log$20 = globalLogger.createChild("StakingManager");
 	StakingManager = class extends DefiManager {
 		constructor(createFactoryContext) {
@@ -34025,7 +34014,7 @@ var init_StakingManager = __esmMin((() => {
 					error,
 					params
 				});
-				throw error;
+				throw toDefiError(error, "Failed to get staking quote");
 			}
 		}
 		/**
@@ -34042,7 +34031,7 @@ var init_StakingManager = __esmMin((() => {
 					error,
 					params
 				});
-				throw error;
+				throw toDefiError(error, "Failed to build staking transaction");
 			}
 		}
 		/**
@@ -34065,7 +34054,7 @@ var init_StakingManager = __esmMin((() => {
 					userAddress,
 					network
 				});
-				throw error;
+				throw toDefiError(error, "Failed to get staking balance");
 			}
 		}
 		/**
@@ -34085,7 +34074,7 @@ var init_StakingManager = __esmMin((() => {
 					error,
 					network
 				});
-				throw error;
+				throw toDefiError(error, "Failed to get staking info");
 			}
 		}
 		/**
@@ -34105,16 +34094,26 @@ var init_StakingManager = __esmMin((() => {
 					error,
 					network
 				});
-				throw error;
+				throw toDefiError(error, "Failed to get staking metadata");
 			}
 		}
-		createError(message, code, details) {
-			const errorCode = Object.values(StakingErrorCode).includes(code) ? code : StakingErrorCode.InvalidParams;
-			log$20.error(message, {
-				code,
-				details
-			});
-			return new StakingError(message, errorCode, details);
+	};
+}));
+//#endregion
+//#region ../walletkit/dist/esm/defi/staking/errors.js
+var StakingErrorCode, StakingError;
+var init_errors$2 = __esmMin((() => {
+	init_errors$4();
+	(function(StakingErrorCode) {
+		StakingErrorCode["InvalidParams"] = "INVALID_PARAMS";
+		StakingErrorCode["UnsupportedOperation"] = "UNSUPPORTED_OPERATION";
+	})(StakingErrorCode || (StakingErrorCode = {}));
+	StakingError = class extends DefiError {
+		code;
+		constructor(message, code, details) {
+			super(message, code, details);
+			this.name = "StakingError";
+			this.code = code;
 		}
 	};
 }));
@@ -34131,6 +34130,88 @@ var GaslessProvider;
 var init_GaslessProvider = __esmMin((() => {
 	GaslessProvider = class {
 		type = "gasless";
+	};
+}));
+//#endregion
+//#region ../walletkit/dist/esm/defi/gasless/GaslessManager.js
+var log$19, GaslessManager;
+var init_GaslessManager = __esmMin((() => {
+	init_Logger();
+	init_DefiManager();
+	init_errors$4();
+	log$19 = globalLogger.createChild("GaslessManager");
+	GaslessManager = class extends DefiManager {
+		constructor(createFactoryContext) {
+			super(createFactoryContext);
+		}
+		/**
+		* Get static metadata for a gasless provider (display name, logo, url).
+		*/
+		async getMetadata(providerId) {
+			const selectedProviderId = providerId ?? this.defaultProviderId;
+			log$19.debug("Getting gasless provider metadata", { providerId: selectedProviderId });
+			try {
+				return await this.getProvider(selectedProviderId).getMetadata();
+			} catch (error) {
+				log$19.error("Failed to get gasless provider metadata", { error });
+				throw toDefiError(error, "Failed to get gasless provider metadata");
+			}
+		}
+		/**
+		* Fetch the relayer's configuration (relay address + accepted fee assets).
+		*
+		* `network` defaults to the provider's first supported network.
+		*/
+		async getConfig(network, providerId) {
+			const provider = this.getProvider(providerId ?? this.defaultProviderId);
+			const targetNetwork = network ?? provider.getSupportedNetworks()[0];
+			log$19.debug("Getting gasless config", {
+				network: targetNetwork?.chainId,
+				providerId: providerId ?? this.defaultProviderId
+			});
+			try {
+				return await provider.getConfig(targetNetwork);
+			} catch (error) {
+				log$19.error("Failed to get gasless config", { error });
+				throw toDefiError(error, "Failed to get gasless config");
+			}
+		}
+		/**
+		* Quote fees and obtain relayer-wrapped messages for signing.
+		*/
+		async getQuote(params, providerId) {
+			log$19.debug("Quoting gasless transaction", {
+				network: params.network.chainId,
+				walletAddress: params.walletAddress,
+				feeAsset: params.feeAsset,
+				messagesCount: params.messages.length,
+				providerId: providerId ?? this.defaultProviderId
+			});
+			try {
+				return await this.getProvider(providerId ?? this.defaultProviderId).getQuote(params);
+			} catch (error) {
+				log$19.error("Failed to quote gasless transaction", {
+					error,
+					params
+				});
+				throw toDefiError(error, "Failed to quote gasless transaction");
+			}
+		}
+		/**
+		* Submit a signed transaction BoC to the relayer.
+		*/
+		async sendTransaction(params, providerId) {
+			log$19.debug("Sending gasless transaction", {
+				network: params.network.chainId,
+				providerId: providerId ?? this.defaultProviderId
+			});
+			try {
+				return await this.getProvider(providerId ?? this.defaultProviderId).sendTransaction(params);
+			} catch (error) {
+				log$19.error("Failed to send gasless transaction", { error });
+				throw toDefiError(error, "Failed to send gasless transaction");
+			}
+		}
 	};
 }));
 //#endregion
@@ -34156,91 +34237,6 @@ var init_errors$1 = __esmMin((() => {
 			super(message, code, details);
 			this.name = "GaslessError";
 			this.code = code;
-		}
-	};
-}));
-//#endregion
-//#region ../walletkit/dist/esm/defi/gasless/GaslessManager.js
-var log$19, GaslessManager;
-var init_GaslessManager = __esmMin((() => {
-	init_Logger();
-	init_DefiManager();
-	init_errors$1();
-	log$19 = globalLogger.createChild("GaslessManager");
-	GaslessManager = class extends DefiManager {
-		constructor(createFactoryContext) {
-			super(createFactoryContext);
-		}
-		/**
-		* Get static metadata for a gasless provider (display name, logo, url).
-		*/
-		async getMetadata(providerId) {
-			const selectedProviderId = providerId ?? this.defaultProviderId;
-			log$19.debug("Getting gasless provider metadata", { providerId: selectedProviderId });
-			try {
-				return await this.getProvider(selectedProviderId).getMetadata();
-			} catch (error) {
-				log$19.error("Failed to get gasless provider metadata", { error });
-				throw error;
-			}
-		}
-		/**
-		* Fetch the relayer's configuration (relay address + accepted fee assets).
-		*
-		* `network` defaults to the provider's first supported network.
-		*/
-		async getConfig(network, providerId) {
-			const provider = this.getProvider(providerId ?? this.defaultProviderId);
-			const targetNetwork = network ?? provider.getSupportedNetworks()[0];
-			log$19.debug("Getting gasless config", {
-				network: targetNetwork?.chainId,
-				providerId: providerId ?? this.defaultProviderId
-			});
-			try {
-				return await provider.getConfig(targetNetwork);
-			} catch (error) {
-				log$19.error("Failed to get gasless config", { error });
-				throw error;
-			}
-		}
-		/**
-		* Quote fees and obtain relayer-wrapped messages for signing.
-		*/
-		async getQuote(params, providerId) {
-			log$19.debug("Quoting gasless transaction", {
-				network: params.network.chainId,
-				walletAddress: params.walletAddress,
-				feeAsset: params.feeAsset,
-				messagesCount: params.messages.length,
-				providerId: providerId ?? this.defaultProviderId
-			});
-			try {
-				return await this.getProvider(providerId ?? this.defaultProviderId).getQuote(params);
-			} catch (error) {
-				log$19.error("Failed to quote gasless transaction", {
-					error,
-					params
-				});
-				throw error;
-			}
-		}
-		/**
-		* Submit a signed transaction BoC to the relayer.
-		*/
-		async sendTransaction(params, providerId) {
-			log$19.debug("Sending gasless transaction", {
-				network: params.network.chainId,
-				providerId: providerId ?? this.defaultProviderId
-			});
-			try {
-				return await this.getProvider(providerId ?? this.defaultProviderId).sendTransaction(params);
-			} catch (error) {
-				log$19.error("Failed to send gasless transaction", { error });
-				throw error;
-			}
-		}
-		createError(message, code, details) {
-			return new GaslessError(message, code, details);
 		}
 	};
 }));
@@ -36686,6 +36682,7 @@ var init_errors = __esmMin((() => {
 	(function(CryptoOnrampErrorCode) {
 		CryptoOnrampErrorCode["ProviderError"] = "PROVIDER_ERROR";
 		CryptoOnrampErrorCode["QuoteFailed"] = "QUOTE_FAILED";
+		CryptoOnrampErrorCode["DepositFailed"] = "DEPOSIT_FAILED";
 		CryptoOnrampErrorCode["RefundAddressRequired"] = "REFUND_ADDRESS_REQUIRED";
 		CryptoOnrampErrorCode["InvalidRefundAddress"] = "INVALID_REFUND_ADDRESS";
 		CryptoOnrampErrorCode["ReversedAmountNotSupported"] = "REVERSED_AMOUNT_NOT_SUPPORTED";
@@ -36710,7 +36707,7 @@ var init_errors = __esmMin((() => {
 //#region ../walletkit/dist/esm/defi/crypto-onramp/CryptoOnrampManager.js
 var log$11, CryptoOnrampManager;
 var init_CryptoOnrampManager = __esmMin((() => {
-	init_errors();
+	init_errors$4();
 	init_Logger();
 	init_DefiManager();
 	log$11 = globalLogger.createChild("CryptoOnrampManager");
@@ -36726,7 +36723,7 @@ var init_CryptoOnrampManager = __esmMin((() => {
 				return this.getProvider(selectedProviderId).getMetadata();
 			} catch (error) {
 				log$11.error("Failed to get crypto onramp metadata", { error });
-				throw error;
+				throw toDefiError(error, "Failed to get crypto onramp metadata");
 			}
 		}
 		/**
@@ -36758,7 +36755,7 @@ var init_CryptoOnrampManager = __esmMin((() => {
 					error,
 					params
 				});
-				throw error;
+				throw toDefiError(error, "Failed to get crypto onramp quote");
 			}
 		}
 		/**
@@ -36787,7 +36784,7 @@ var init_CryptoOnrampManager = __esmMin((() => {
 					error,
 					params
 				});
-				throw error;
+				throw toDefiError(error, "Failed to create crypto onramp deposit");
 			}
 		}
 		/**
@@ -36811,7 +36808,7 @@ var init_CryptoOnrampManager = __esmMin((() => {
 					error,
 					params
 				});
-				throw error;
+				throw toDefiError(error, "Failed to get crypto onramp deposit status");
 			}
 		}
 		/**
@@ -36825,11 +36822,8 @@ var init_CryptoOnrampManager = __esmMin((() => {
 				return await this.getProvider(selectedProviderId).getSupportedCurrencies();
 			} catch (error) {
 				log$11.error("Failed to discover crypto onramp supported currencies", { error });
-				throw error;
+				throw toDefiError(error, "Failed to discover crypto onramp supported currencies");
 			}
-		}
-		createError(message, code, details) {
-			return new CryptoOnrampError(message, code, details);
 		}
 	};
 }));
@@ -41057,6 +41051,7 @@ init_models();
 init_Logger();
 init_StakingProvider();
 init_errors$2();
+init_errors$4();
 init_ApiClientTonApi();
 init_units();
 var log$3 = globalLogger.createChild("TonStakersStakingProvider");
@@ -41121,7 +41116,7 @@ var TonStakersStakingProvider = class TonStakersStakingProvider extends StakingP
 			if (!hasDefaultContract && !hasCustomContract) continue;
 			chainConfig[chainId] = perChain;
 		}
-		if (Object.keys(chainConfig).length === 0) throw new Error("createTonstakersProvider: no eligible networks (add mainnet/testnet or pass metadata.contractAddress in overrides)");
+		if (Object.keys(chainConfig).length === 0) throw new DefiError("createTonstakersProvider: no eligible networks (add mainnet/testnet or pass metadata.contractAddress in overrides)", DefiErrorCode.InvalidParams);
 		return new TonStakersStakingProvider(ctx.networkManager, chainConfig);
 	}
 	/**
@@ -41380,7 +41375,7 @@ var TonStakersStakingProvider = class TonStakersStakingProvider extends StakingP
 			network,
 			apiKey: token
 		}).getJson(`/v2/staking/pool/${address}`);
-		if (!poolInfo?.pool?.apy) throw new Error("Invalid APY data from TonAPI");
+		if (!poolInfo?.pool?.apy) throw new StakingError("Invalid APY data from TonAPI", StakingErrorCode.InvalidParams);
 		return Number(poolInfo.pool.apy);
 	}
 	static isValidTokenInfo(token) {
@@ -46229,6 +46224,7 @@ init_Logger();
 init_retry();
 init_errors$1();
 init_GaslessProvider();
+init_errors$4();
 var log = globalLogger.createChild("TonApiGaslessProvider");
 /**
 * Gasless provider implementation backed by the public TonAPI REST API.
@@ -46299,7 +46295,7 @@ var TonApiGaslessProvider = class TonApiGaslessProvider extends GaslessProvider 
 			chainConfig[chainId] = perChain;
 		}
 		else for (const chainId of configuredChains) chainConfig[chainId] = {};
-		if (Object.keys(chainConfig).length === 0) throw new Error("createTonApiGaslessProvider: no eligible networks (configure at least one network in the kit, or pass `chains` matching a configured network)");
+		if (Object.keys(chainConfig).length === 0) throw new DefiError("createTonApiGaslessProvider: no eligible networks (configure at least one network in the kit, or pass `chains` matching a configured network)", DefiErrorCode.InvalidParams);
 		return new TonApiGaslessProvider(chainConfig, config);
 	}
 	getSupportedNetworks() {
