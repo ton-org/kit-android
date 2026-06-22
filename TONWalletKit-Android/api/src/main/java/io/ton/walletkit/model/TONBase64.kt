@@ -73,10 +73,14 @@ data class TONBase64(
         /**
          * Parses a Base64-encoded string, validating it upfront.
          *
-         * @throws IllegalArgumentException if [value] is not valid Base64.
+         * @throws TONBase64ValidationException if [value] is not valid Base64.
          */
         fun parse(value: String): TONBase64 {
-            Base64.decode(value, Base64.DEFAULT)
+            try {
+                Base64.decode(value, Base64.DEFAULT)
+            } catch (e: IllegalArgumentException) {
+                throw TONBase64ValidationException(value)
+            }
             return TONBase64(value)
         }
     }
@@ -101,3 +105,12 @@ object TONBase64Serializer : KSerializer<TONBase64> {
         return TONBase64(decoder.decodeString())
     }
 }
+
+/**
+ * Raised when a string fails [TONBase64] validation.
+ *
+ * @property invalidValue The string that was not valid Base64.
+ */
+class TONBase64ValidationException(
+    val invalidValue: String,
+) : IllegalArgumentException("$invalidValue is not a valid base64 encoded string.")

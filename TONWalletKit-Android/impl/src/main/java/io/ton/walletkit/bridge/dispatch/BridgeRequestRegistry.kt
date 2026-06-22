@@ -21,6 +21,7 @@
  */
 package io.ton.walletkit.bridge.dispatch
 
+import io.ton.walletkit.bridge.BridgeDispatchException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.serializer
@@ -58,7 +59,7 @@ internal class BridgeRequestRegistry(private val json: Json) {
 
     suspend fun dispatch(method: String, params: JsonElement): String {
         val handler = handlers[method]
-            ?: throw IllegalArgumentException("Unknown reverse-RPC method: $method")
+            ?: throw BridgeDispatchException.UnknownReverseRpcMethod(method)
         return handler(params)
     }
 }

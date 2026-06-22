@@ -25,6 +25,7 @@ import android.content.Context
 import android.webkit.WebView
 import io.ton.walletkit.ITONWallet
 import io.ton.walletkit.ITONWalletKit
+import io.ton.walletkit.TONWalletKitException
 import io.ton.walletkit.WebViewTonConnectInjector
 import io.ton.walletkit.api.TONTonStakersProviderConfig
 import io.ton.walletkit.api.WalletVersions
@@ -225,7 +226,7 @@ internal class TONWalletKit private constructor(
 
     private fun checkNotDestroyed() {
         if (isDestroyed) {
-            throw IllegalStateException("TONWalletKit instance has been destroyed. Create a new instance.")
+            throw TONWalletKitException.Destroyed()
         }
     }
 

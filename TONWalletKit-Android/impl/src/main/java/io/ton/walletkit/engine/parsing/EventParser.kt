@@ -107,7 +107,7 @@ internal class EventParser(
     private inline fun <reified T : Any> decode(data: JsonObject): T = json.decodeFromBridge(data)
 
     private inline fun <reified T : Any> decodeUpdate(type: String, data: JsonObject): T? = try {
-        val update = data.optJsonObject("update") ?: error("Missing 'update' field")
+        val update = data.optJsonObject("update") ?: throw TONBridgeEventException.MissingField("update")
         json.decodeFromBridge<T>(update)
     } catch (e: Exception) {
         Logger.e(TAG, "Failed to parse $type: ${e.message}", e)

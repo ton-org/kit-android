@@ -21,6 +21,7 @@
  */
 package io.ton.walletkit.engine.state
 
+import io.ton.walletkit.bridge.BridgeDispatchException
 import io.ton.walletkit.internal.util.Logger
 import java.util.concurrent.ConcurrentHashMap
 
@@ -56,6 +57,6 @@ internal abstract class KotlinProviderRegistry<T : Any> {
      */
     protected fun require(providerId: String): T = providers[providerId] ?: run {
         Logger.w(tag, "No Kotlin provider registered for id=$providerId")
-        throw IllegalStateException("No Kotlin provider registered for id=$providerId")
+        throw BridgeDispatchException.ProviderNotRegistered(providerId)
     }
 }

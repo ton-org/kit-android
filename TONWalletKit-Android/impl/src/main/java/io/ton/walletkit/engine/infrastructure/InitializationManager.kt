@@ -22,7 +22,7 @@
 package io.ton.walletkit.engine.infrastructure
 
 import android.content.Context
-import io.ton.walletkit.WalletKitBridgeException
+import io.ton.walletkit.TONWalletKitException
 import io.ton.walletkit.api.MAINNET
 import io.ton.walletkit.api.TESTNET
 import io.ton.walletkit.api.generated.TONNetwork
@@ -96,7 +96,7 @@ internal class InitializationManager(
                 return@withLock
             }
 
-            val effectiveConfig = configuration ?: pendingInitConfig ?: throw WalletKitBridgeException(ERROR_INIT_CONFIG_REQUIRED)
+            val effectiveConfig = configuration ?: pendingInitConfig ?: throw TONWalletKitException.NotInitialized()
             pendingInitConfig = null
 
             Logger.d(TAG, "Auto-initializing WalletKit with config: network=${resolveNetworkName(effectiveConfig)}")
@@ -107,7 +107,7 @@ internal class InitializationManager(
                 Logger.d(TAG, "WalletKit auto-initialization completed successfully")
             } catch (err: Throwable) {
                 Logger.e(TAG, ERROR_WALLETKIT_AUTO_INIT_FAILED, err)
-                throw WalletKitBridgeException(ERROR_FAILED_AUTO_INIT_WALLETKIT + err.message)
+                throw TONWalletKitException.AutoInitializationFailed(err)
             }
         }
     }
@@ -333,10 +333,8 @@ internal class InitializationManager(
     private companion object {
         private const val TAG = LogConstants.TAG_WEBVIEW_ENGINE
         private const val ERROR_WALLETKIT_AUTO_INIT_FAILED = "WalletKit auto-initialization failed"
-        private const val ERROR_FAILED_AUTO_INIT_WALLETKIT = "Failed to auto-initialize WalletKit: "
         private const val ERROR_FAILED_GET_APP_VERSION = "Failed to get app version, using default"
         private const val ERROR_FAILED_GET_APP_NAME = "Failed to get app name, using package name"
-        private const val ERROR_INIT_CONFIG_REQUIRED = "TONWalletKit.initialize() must be called before using the SDK."
         private const val DEFAULT_MAX_MESSAGES = 4
         private val DEFAULT_SIGN_TYPES = listOf(SignDataType.TEXT, SignDataType.BINARY, SignDataType.CELL)
     }
