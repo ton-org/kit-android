@@ -268,6 +268,21 @@ internal object BridgeMethodConstants {
      */
     const val METHOD_GET_JETTON_WALLET_ADDRESS = "getJettonWalletAddress"
 
+    /**
+     * Method name for resolving jetton-master metadata by address (kit-level jettons manager).
+     */
+    const val METHOD_GET_JETTON_INFO = "getJettonInfo"
+
+    /**
+     * Method name for listing the jettons held by a user address (kit-level jettons manager).
+     */
+    const val METHOD_GET_ADDRESS_JETTONS = "getAddressJettons"
+
+    /**
+     * Method name for validating a jetton address (kit-level jettons manager).
+     */
+    const val METHOD_VALIDATE_JETTON_ADDRESS = "validateJettonAddress"
+
     // Wallet API client methods (per-wallet TONAPIClient bridge).
 
     /** Send a signed BOC via the wallet's API client. */
