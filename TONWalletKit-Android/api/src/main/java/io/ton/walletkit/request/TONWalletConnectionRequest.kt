@@ -64,6 +64,7 @@ class TONWalletConnectionRequest(
         }
     }
 
+    /** Reject the connection request. */
     suspend fun reject(reason: String? = null, errorCode: Int? = null) {
         handler.rejectConnect(event, reason, errorCode)
     }

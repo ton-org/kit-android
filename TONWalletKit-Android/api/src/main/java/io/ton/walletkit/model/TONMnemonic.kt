@@ -116,6 +116,14 @@ class TONMnemonic private constructor(
      */
     fun toPhrase(): String = words.filter { it.isNotEmpty() }.joinToString(" ")
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is TONMnemonic) return false
+        return words == other.words
+    }
+
+    override fun hashCode(): Int = words.hashCode()
+
     override fun toString(): String = toPhrase()
 }
 

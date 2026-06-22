@@ -108,13 +108,13 @@ class SendTokensViewModel(
             runCatching {
                 tokens += SendableToken(
                     id = "ton",
-                    name = "Toncoin",
-                    symbol = "TON",
+                    name = "Gram",
+                    symbol = "GRAM",
                     decimals = TON_DECIMALS,
                     displayBalance = TonFormatter.formatNanoTon(wallet.balance().value),
                     masterAddress = null,
                     imageSource = null,
-                    requiredAmountInfo = "Minimum transaction: 0.0001 TON",
+                    requiredAmountInfo = "Minimum transaction: 0.0001 GRAM",
                 )
             }.onFailure { Log.e(TAG, "Failed to load TON balance", it) }
 

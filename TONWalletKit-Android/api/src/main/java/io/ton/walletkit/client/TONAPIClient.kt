@@ -35,20 +35,19 @@ import io.ton.walletkit.model.TONTokenAmount
 import io.ton.walletkit.model.TONUserFriendlyAddress
 
 /**
- * Interface for custom API client implementations.
- *
- * Implement this interface to provide custom TON blockchain API access. Covers the three
- * responsibilities a wallet kit needs from a user-supplied client: send signed BOCs, run
- * contract get methods, and read masterchain info. Network identity is established at
- * registration time via
- * [io.ton.walletkit.config.TONWalletKitConfiguration.NetworkConfiguration], not on the
- * client itself.
+ * Interface for custom TON API client implementations: send signed BoCs, run contract get-methods,
+ * read chain state. Network identity is set at registration via
+ * [io.ton.walletkit.config.TONWalletKitConfiguration.NetworkConfiguration], not here. Suspend
+ * methods may throw WalletKitBridgeException when the SDK-backed client is used.
  */
 interface TONAPIClient {
+    /** The network this client talks to. */
     fun network(): TONNetwork
 
+    /** Broadcast a signed external message (base64 BoC); returns its hash. */
     suspend fun sendBoc(boc: TONBase64): String
 
+    /** Run a contract get-method and return its result stack. */
     suspend fun runGetMethod(
         address: TONUserFriendlyAddress,
         method: String,
@@ -56,32 +55,41 @@ interface TONAPIClient {
         seqno: UInt? = null,
     ): TONGetMethodResult
 
+    /** Get an account's balance, in nano-TON. */
     suspend fun getBalance(
         address: TONUserFriendlyAddress,
         seqno: UInt? = null,
     ): TONTokenAmount
 
+    /** Get the latest masterchain info. */
     suspend fun getMasterchainInfo(): TONMasterchainInfo
 
+    /** List NFT items by their contract addresses. */
     suspend fun nftItemsByAddress(request: TONNFTsRequest): TONNFTsResponse
 
+    /** List NFT items owned by an account. */
     suspend fun nftItemsByOwner(request: TONUserNFTsRequest): TONNFTsResponse
 
+    /** Emulate an external message and return its predicted result. */
     suspend fun fetchEmulation(
         messageBoc: TONBase64,
         ignoreSignature: Boolean = false,
     ): TONEmulationResult
 
+    /** Get an account's on-chain state. */
     suspend fun accountState(
         address: TONUserFriendlyAddress,
         seqno: UInt? = null,
     ): TONAccountState
 
+    /** Batch [accountState] for several accounts. */
     suspend fun accountStates(
         addresses: List<TONUserFriendlyAddress>,
     ): Map<TONUserFriendlyAddress, TONAccountState>
 
+    /** Resolve a TON DNS domain to its wallet address, or null. */
     suspend fun resolveDnsWallet(domain: String): String?
 
+    /** Reverse-resolve a wallet address to its TON DNS domain, or null. */
     suspend fun backResolveDnsWallet(address: TONUserFriendlyAddress): String?
 }

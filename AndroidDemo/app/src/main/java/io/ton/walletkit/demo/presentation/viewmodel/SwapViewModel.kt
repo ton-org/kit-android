@@ -53,7 +53,7 @@ class SwapViewModel(
     }
 
     data class UiState(
-        val fromToken: TONSwapToken = TONSwapToken(address = "ton", decimals = 9.0, name = "TON", symbol = "TON"),
+        val fromToken: TONSwapToken = TONSwapToken(address = "ton", decimals = 9.0, name = "Gram", symbol = "GRAM"),
         val toToken: TONSwapToken = TONSwapToken(
             address = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
             decimals = 6.0,

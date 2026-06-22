@@ -82,7 +82,7 @@ private fun ItemEntry(item: TONStructuredItem, index: Int) {
     when (item) {
         is TONStructuredItem.Ton -> item.value.let { ton ->
             EntryCard(
-                title = "Send TON #${index + 1}",
+                title = "Send GRAM #${index + 1}",
                 toAddress = ton.address,
                 amount = tonAmount(ton.amount),
                 extraLines = emptyList(),
@@ -243,7 +243,7 @@ private fun MoneyFlowRow(transfer: TONTransactionTraceMoneyFlowItem) {
     val amountText = TonFormatter.formatNanoTon(transfer.amount.removePrefix("-"))
     val prefix = if (isPositive) "+" else "-"
     val unit = when (transfer.assetType) {
-        TONAssetType.ton -> "TON"
+        TONAssetType.ton -> "GRAM"
         TONAssetType.nft -> "NFT"
         TONAssetType.jetton -> ""
     }
@@ -291,12 +291,12 @@ internal fun TransactionPreviewError(message: String) {
 }
 
 private fun assetName(transfer: TONTransactionTraceMoneyFlowItem): String = when (transfer.assetType) {
-    TONAssetType.ton -> "TON"
+    TONAssetType.ton -> "GRAM"
     TONAssetType.jetton -> transfer.tokenAddress?.value?.let(::shortAddress) ?: "Jetton"
     TONAssetType.nft -> transfer.tokenAddress?.value?.let(::shortAddress) ?: "NFT"
 }
 
-private fun tonAmount(nano: String): String = "${TonFormatter.formatNanoTon(nano)} TON"
+private fun tonAmount(nano: String): String = "${TonFormatter.formatNanoTon(nano)} GRAM"
 
 private fun shortAddress(address: String): String = if (address.length > ADDRESS_TRUNCATION * 2) {
     "${address.take(ADDRESS_TRUNCATION)}...${address.takeLast(ADDRESS_TRUNCATION)}"

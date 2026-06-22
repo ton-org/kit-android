@@ -85,10 +85,10 @@ class StakingViewModel(
         ),
     ) {
         val inputTokenSymbol: String
-            get() = if (direction == TONStakingQuoteDirection.stake) "TON" else "tsTON"
+            get() = if (direction == TONStakingQuoteDirection.stake) "GRAM" else "tsTON"
 
         val receiveTokenSymbol: String
-            get() = if (direction == TONStakingQuoteDirection.stake) "tsTON" else "TON"
+            get() = if (direction == TONStakingQuoteDirection.stake) "tsTON" else "GRAM"
 
         val canGetQuote: Boolean
             get() = amount.isNotEmpty() && (amount.toDoubleOrNull() ?: 0.0) > 0 && !isLoadingQuote

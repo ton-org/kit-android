@@ -33,13 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 
-// Mirrors iOS `Icons/TONIcon.swift` 1-for-1.
-//
-// Each case is backed by a vector drawable in
-// `:designsystem/src/main/res/drawable/<resourceName>.xml`. Resource names are flat
-// lowercase to match the conversion the iOS SVGs were dropped through. Two iOS
-// names ("Switch", "New") collide with Kotlin/AAPT reserved or near-reserved names
-// — those drawables ship as `resource_switch` / `resource_new`.
 enum class TonIcon(val resourceName: String, val category: Category) {
     // Tabbar
     DiscoverFilled("discoverfilled", Category.Tabbar),
@@ -81,7 +74,7 @@ enum class TonIcon(val resourceName: String, val category: Category) {
     Star24("star24", Category.Icons24),
     SwitchVertical24("switchvertical24", Category.Icons24),
     Ton("ton", Category.Icons24),
-    Toncoin("toncoin", Category.Icons24),
+    Gram("gram", Category.Icons24),
     TonFill("tonfill", Category.Icons24),
     Trend("trend", Category.Icons24),
     Volume("volume", Category.Icons24),
@@ -149,7 +142,7 @@ enum class TonIcon(val resourceName: String, val category: Category) {
     Share40("share40", Category.Icons40),
     Share40Alt("share40alt", Category.Icons40),
     TelegramWallet40("telegramwallet40", Category.Icons40),
-    Toncoin40("toncoin40", Category.Icons40),
+    Gram40("gram40", Category.Icons40),
     ;
 
     enum class Category { Tabbar, Icons24, Icons20, Icons16, Icons12, Icons40 }

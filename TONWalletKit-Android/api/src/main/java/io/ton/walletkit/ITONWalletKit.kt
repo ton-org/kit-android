@@ -227,7 +227,7 @@ interface ITONWalletKit {
     /**
      * Access the staking manager for registering providers and performing staking operations.
      */
-    fun staking(): ITONStakingManager
+    suspend fun staking(): ITONStakingManager
 
     /**
      * Create a TonStakers staking provider.
@@ -246,7 +246,7 @@ interface ITONWalletKit {
     /**
      * Get the streaming manager.
      */
-    fun streaming(): ITONStreamingManager
+    suspend fun streaming(): ITONStreamingManager
 
     suspend fun createStreamingProvider(
         config: TONTonCenterStreamingProviderConfig,

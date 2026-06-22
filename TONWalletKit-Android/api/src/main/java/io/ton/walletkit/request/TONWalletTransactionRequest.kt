@@ -35,10 +35,11 @@ class TONWalletTransactionRequest(
     val event: TONSendTransactionRequestEvent,
     private val handler: RequestHandler,
 ) {
-    suspend fun approve(response: TONSendTransactionApprovalResponse? = null) {
+    /** Approve, sign, and broadcast the transaction; returns the finalized approval response. */
+    suspend fun approve(response: TONSendTransactionApprovalResponse? = null): TONSendTransactionApprovalResponse =
         handler.approveTransaction(event, response)
-    }
 
+    /** Reject the transaction request. */
     suspend fun reject(reason: String? = null, errorCode: Int? = null) {
         handler.rejectTransaction(event, reason, errorCode)
     }

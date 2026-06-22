@@ -236,7 +236,7 @@ private fun StakingContent(
             isError = amountInvalid || belowMinimum || aboveBalance,
             supporting = when {
                 amountInvalid -> "Enter a valid positive amount."
-                belowMinimum -> "TonStakers minimum stake is 1 TON."
+                belowMinimum -> "TonStakers minimum stake is 1 GRAM."
                 aboveBalance -> "Amount is higher than the available wallet balance."
                 else -> null
             },
@@ -299,7 +299,7 @@ private fun TONUnstakeMode.toDisplayLabel(): String = when (this) {
 }
 
 private fun TONStakingQuoteDirection.inputSymbol(): String = when (this) {
-    TONStakingQuoteDirection.stake -> "TON"
+    TONStakingQuoteDirection.stake -> "GRAM"
     TONStakingQuoteDirection.unstake -> "tsTON"
 }
 

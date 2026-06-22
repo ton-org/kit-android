@@ -58,9 +58,9 @@ private data class OnboardingPage(
 
 private val DefaultPages = listOf(
     OnboardingPage(
-        icon = TonIcon.Toncoin40,
+        icon = TonIcon.Gram40,
         title = "Welcome to TON",
-        description = "Hold and manage your Toncoin and tokens in one place.",
+        description = "Hold and manage your Gram and tokens in one place.",
     ),
     OnboardingPage(
         icon = TonIcon.Hand40,

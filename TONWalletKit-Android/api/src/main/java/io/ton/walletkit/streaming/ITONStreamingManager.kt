@@ -29,22 +29,32 @@ import io.ton.walletkit.api.generated.TONStreamingWatchType
 import io.ton.walletkit.api.generated.TONTransactionsUpdate
 import kotlinx.coroutines.flow.Flow
 
+/** Real-time subscriptions (balance, transactions, jettons) backed by registered [ITONStreamingProvider]s, delivered as cold [Flow]s. */
 interface ITONStreamingManager {
+    /** Whether a streaming provider is registered for [network]. */
     suspend fun hasProvider(network: TONNetwork): Boolean
 
+    /** Register a streaming provider; its [ITONStreamingProvider.network] selects the network. */
     suspend fun registerProvider(provider: ITONStreamingProvider)
 
+    /** Open the streaming connection(s). */
     suspend fun connect()
 
+    /** Close the streaming connection(s). */
     suspend fun disconnect()
 
+    /** Connection-state changes for [network] (true = connected). */
     fun connectionChange(network: TONNetwork): Flow<Boolean>
 
+    /** Watch an account's balance on [network]. */
     fun balance(network: TONNetwork, address: String): Flow<TONBalanceUpdate>
 
+    /** Watch an account's transactions on [network]. */
     fun transactions(network: TONNetwork, address: String): Flow<TONTransactionsUpdate>
 
+    /** Watch an account's jetton balances on [network]. */
     fun jettons(network: TONNetwork, address: String): Flow<TONJettonUpdate>
 
+    /** Watch the given [types] for an account on [network] in one stream. */
     fun updates(network: TONNetwork, address: String, types: List<TONStreamingWatchType>): Flow<TONStreamingUpdate>
 }

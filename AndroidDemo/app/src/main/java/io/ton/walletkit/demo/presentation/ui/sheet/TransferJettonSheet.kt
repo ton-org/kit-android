@@ -248,7 +248,7 @@ fun TransferJettonSheet(
 
             // Info
             Text(
-                text = "A small amount of TON will be used as a network fee for this transfer.",
+                text = "A small amount of GRAM will be used as a network fee for this transfer.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

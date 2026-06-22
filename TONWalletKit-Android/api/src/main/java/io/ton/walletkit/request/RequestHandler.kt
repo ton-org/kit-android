@@ -52,21 +52,21 @@ interface RequestHandler {
     suspend fun approveTransaction(
         event: TONSendTransactionRequestEvent,
         response: TONSendTransactionApprovalResponse? = null,
-    )
+    ): TONSendTransactionApprovalResponse
 
     suspend fun rejectTransaction(event: TONSendTransactionRequestEvent, reason: String?, errorCode: Int?)
 
     suspend fun approveSignData(
         event: TONSignDataRequestEvent,
         response: TONSignDataApprovalResponse? = null,
-    )
+    ): TONSignDataApprovalResponse
 
     suspend fun rejectSignData(event: TONSignDataRequestEvent, reason: String?, errorCode: Int?)
 
     suspend fun approveSignMessage(
         event: TONSignMessageRequestEvent,
         response: TONSignMessageApprovalResponse? = null,
-    )
+    ): TONSignMessageApprovalResponse
 
     suspend fun rejectSignMessage(event: TONSignMessageRequestEvent, reason: String?, errorCode: Int?)
 }

@@ -54,6 +54,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
@@ -84,6 +85,9 @@ internal class TonConnectInjector(
         private const val ERROR_WALLET_ENGINE_NOT_INITIALIZED = "Wallet engine not initialized"
         private const val ERROR_FAILED_PROCESS_REQUEST = "Failed to process request"
         private const val ERROR_CODE_INTERNAL = 500
+        private const val ERROR_CODE_FORBIDDEN = 403
+        private const val FORBIDDEN_IFRAME_MESSAGE =
+            "TonConnect request rejected: the iframe has an opaque origin and is not part of a connected dApp"
         private const val METHOD_SEND = "send"
 
         // Registry of active WebViews for JS Bridge sessions
@@ -197,15 +201,38 @@ internal class TonConnectInjector(
      */
     @SuppressLint("SetJavaScriptEnabled")
     override fun setup() {
-        // Add JavaScript interface for bridge communication
+        // Bridge communication intake.
+        //
+        // SECURITY: prefer WebViewCompat.addWebMessageListener over addJavascriptInterface.
+        // A @JavascriptInterface method carries NO information about which frame called it,
+        // so the bridge previously attributed every request to webView.url (the main-frame
+        // URL) — letting any embedded iframe issue connect/sign/transaction calls under the
+        // host dApp's identity. A WebMessageListener instead delivers the platform-
+        // authenticated sourceOrigin and isMainFrame for the calling frame, which JS cannot
+        // forge. Registering it under the same JS object name the bundle already uses
+        // (window.<JS_INTERFACE_NAME>.postMessage) makes it a drop-in for request intake;
+        // responses are still delivered via postWebMessage and are unaffected.
         bridgeInterface = BridgeInterface(
-            onMessage = { json, type -> handleBridgeMessage(json, type) },
+            onMessage = { json, type -> handleBridgeMessage(json, type, sourceOrigin = null, isMainFrame = true) },
             onError = { error -> Logger.e(TAG, "Bridge error: $error") },
         )
-        webView.addJavascriptInterface(
-            bridgeInterface,
-            BrowserConstants.JS_INTERFACE_NAME,
-        )
+
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(
+                webView,
+                BrowserConstants.JS_INTERFACE_NAME,
+                setOf("*"),
+            ) { _, message, sourceOrigin, isMainFrame, _ ->
+                handleSecureBridgeMessage(message.data, sourceOrigin.toString(), isMainFrame)
+            }
+            Logger.d(TAG, "Bridge intake via WebMessageListener (per-frame origin enforced)")
+        } else {
+            // Legacy WebView without per-frame origin support: fall back to the origin-blind
+            // JS interface. Frame identity is unavailable here, so requests are treated as
+            // main-frame (best effort) — these old WebView versions are increasingly rare.
+            Logger.w(TAG, "WEB_MESSAGE_LISTENER unsupported — per-frame origin enforcement unavailable")
+            webView.addJavascriptInterface(bridgeInterface, BrowserConstants.JS_INTERFACE_NAME)
+        }
 
         // Register WebView with existing sessions (important when app is reopened)
         // This ensures disconnect and other events work after the WebView is recreated
@@ -240,10 +267,23 @@ internal class TonConnectInjector(
                 val config = (walletKit as? TONWalletKit)?.engine?.getConfiguration()
                 val injectOptions = buildInjectOptions(config)
 
-                // Create initialization script that calls window.injectWalletKit(options)
+                // Create initialization script that calls window.injectWalletKit(options).
+                // The WebMessageListener object (window.<JS_INTERFACE_NAME>) may attach a
+                // moment after this document-start script runs, so wait briefly for it before
+                // initialising the bridge — otherwise the bundle's transport would not find it.
                 val fullScript = """
                     $injectionScript
-                    window.injectWalletKit($injectOptions);
+                    (function () {
+                        var init = function () { window.injectWalletKit($injectOptions); };
+                        if (typeof ${BrowserConstants.JS_INTERFACE_NAME} !== 'undefined') { init(); return; }
+                        var tries = 0;
+                        var timer = setInterval(function () {
+                            if (typeof ${BrowserConstants.JS_INTERFACE_NAME} !== 'undefined' || tries++ > 50) {
+                                clearInterval(timer);
+                                init();
+                            }
+                        }, 2);
+                    })();
                 """.trimIndent()
 
                 // Allow all origins (*) since this is a wallet browser that loads any dApp
@@ -443,22 +483,65 @@ internal class TonConnectInjector(
         pendingRequests.clear()
     }
 
-    private fun handleBridgeMessage(json: JsonObject, type: String) {
+    private fun handleBridgeMessage(json: JsonObject, type: String, sourceOrigin: String?, isMainFrame: Boolean) {
         scope.launch {
             when (type) {
-                BrowserConstants.MESSAGE_TYPE_BRIDGE_REQUEST -> handleBridgeRequest(json)
+                BrowserConstants.MESSAGE_TYPE_BRIDGE_REQUEST -> handleBridgeRequest(json, sourceOrigin, isMainFrame)
                 else -> Logger.w(TAG, "Unknown message type: $type")
             }
         }
     }
 
-    private fun handleBridgeRequest(json: JsonObject) {
+    /**
+     * Entry point for the WebMessageListener transport: carries the platform-authenticated
+     * [sourceOrigin] and [isMainFrame] for the frame that posted the message.
+     */
+    private fun handleSecureBridgeMessage(message: String?, sourceOrigin: String?, isMainFrame: Boolean) {
+        val raw = message ?: return
+        val json = try {
+            Json.parseToJsonElement(raw).jsonObject
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to parse secure bridge message", e)
+            return
+        }
+        val type = json.optString(BrowserConstants.KEY_TYPE)
+        handleBridgeMessage(json, type, sourceOrigin, isMainFrame)
+    }
+
+    private fun handleBridgeRequest(json: JsonObject, sourceOrigin: String?, isMainFrame: Boolean) {
         val frameId = json.optString(BrowserConstants.KEY_FRAME_ID, BrowserConstants.DEFAULT_FRAME_ID)
         val messageId = json.optString(BrowserConstants.KEY_MESSAGE_ID)
         val method = json.optString(BrowserConstants.KEY_METHOD, BrowserConstants.DEFAULT_METHOD)
 
         if (messageId.isEmpty()) {
             Logger.e(TAG, "Bridge request missing messageId")
+            return
+        }
+
+        // SECURITY (per-origin authorization — same model as iOS): a request from ANY frame
+        // is allowed, but it is attributed to the platform-authenticated origin of the frame
+        // that actually sent it (sourceOrigin) — never to webView.url, which is the main-frame
+        // URL for every frame. The wallet's session lookup is keyed by domain, so a frame
+        // whose origin matches a connected session (the dApp itself, or a same-origin iframe
+        // that is part of it) is authorized, while a cross-origin iframe finds no session for
+        // its own origin and is rejected by the wallet.
+        val resolvedOrigin: String? = if (isMainFrame) {
+            // Main frame: prefer the authenticated origin; fall back to the WebView URL on
+            // legacy WebViews where sourceOrigin is unavailable.
+            sourceOrigin?.takeIf { it.isNotBlank() && it != "null" } ?: webView.url ?: currentUrl
+        } else {
+            // Sub-frame: use ONLY its own authenticated origin. Never fall back to webView.url
+            // (that would let an iframe inherit the host dApp's identity).
+            sourceOrigin?.takeIf { it.isNotBlank() && it != "null" }
+        }
+
+        // An opaque-origin sub-frame (data:/sandboxed, or srcdoc with no inherited origin)
+        // can never belong to a connected session — reject it up front instead of letting it
+        // fall through to the main-frame URL or the "internal-browser" domain.
+        if (!isMainFrame && resolvedOrigin == null) {
+            Logger.w(TAG, "Blocked TonConnect '$method' from opaque-origin sub-frame (frameId=$frameId)")
+            pendingRequests[messageId] = PendingRequest(frameId, messageId, method, System.currentTimeMillis())
+            sendResponse(messageId, errorResponse(FORBIDDEN_IFRAME_MESSAGE, ERROR_CODE_FORBIDDEN))
             return
         }
 
@@ -475,17 +558,7 @@ internal class TonConnectInjector(
         val engine = engine
         if (engine == null) {
             Logger.e(TAG, "WalletKit engine not available!")
-            // Send error response back to dApp
-            val errorResponse = buildJsonObject {
-                put(
-                    ResponseConstants.KEY_ERROR,
-                    buildJsonObject {
-                        put(ResponseConstants.KEY_MESSAGE, ERROR_WALLET_ENGINE_NOT_INITIALIZED)
-                        put(ResponseConstants.KEY_CODE, ERROR_CODE_INTERNAL)
-                    },
-                )
-            }
-            sendResponse(messageId, errorResponse)
+            sendResponse(messageId, errorResponse(ERROR_WALLET_ENGINE_NOT_INITIALIZED, ERROR_CODE_INTERNAL))
             return
         }
 
@@ -512,9 +585,11 @@ internal class TonConnectInjector(
                 // string so the engine can parse it back per the TonConnect method contract.
                 val paramsJson: String? = json[ResponseConstants.KEY_PARAMS]?.toString()
 
-                // Use WebView's current URL (the main frame URL) instead of tracking it manually
-                // This is more reliable than trying to detect page vs resource loads
-                val dAppUrl = webView.url ?: currentUrl
+                // Domain for this request = the per-frame origin resolved above. For the main
+                // frame this is its authenticated origin (or webView.url on legacy WebViews);
+                // for a sub-frame it is the iframe's own origin, so the wallet's domain-keyed
+                // session lookup decides whether that origin is authorized.
+                val dAppUrl = resolvedOrigin ?: webView.url ?: currentUrl
 
                 engine.handleTonConnectRequest(
                     messageId = messageId,
@@ -528,17 +603,7 @@ internal class TonConnectInjector(
                 )
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to forward request to WalletKit engine", e)
-                // Send error response back to dApp
-                val errorResponse = buildJsonObject {
-                    put(
-                        ResponseConstants.KEY_ERROR,
-                        buildJsonObject {
-                            put(ResponseConstants.KEY_MESSAGE, e.message ?: ERROR_FAILED_PROCESS_REQUEST)
-                            put(ResponseConstants.KEY_CODE, ERROR_CODE_INTERNAL)
-                        },
-                    )
-                }
-                sendResponse(messageId, errorResponse)
+                sendResponse(messageId, errorResponse(e.message ?: ERROR_FAILED_PROCESS_REQUEST, ERROR_CODE_INTERNAL))
             }
         }
     }
@@ -560,6 +625,16 @@ internal class TonConnectInjector(
         webView.postWebMessage(
             android.webkit.WebMessage(responseJson.toString()),
             android.net.Uri.EMPTY,
+        )
+    }
+
+    private fun errorResponse(message: String, code: Int): JsonObject = buildJsonObject {
+        put(
+            ResponseConstants.KEY_ERROR,
+            buildJsonObject {
+                put(ResponseConstants.KEY_MESSAGE, message)
+                put(ResponseConstants.KEY_CODE, code)
+            },
         )
     }
 

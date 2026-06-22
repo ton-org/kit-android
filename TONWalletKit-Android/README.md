@@ -79,29 +79,32 @@ val adapter = kit.createV5R1Adapter(
 )
 
 // Step 3: Add wallet
-val wallet = kit.addWallet(adapter.adapterId)
+val wallet = kit.addWallet(adapter)
 ```
 
 #### Read wallet address and balance:
 ```kotlin
-val address = wallet.address
+val address = wallet.address(testnet = true)
 val balance = wallet.balance()
 
-println("Address: ${address ?: "<none>"}")
-println("Balance: ${balance ?: "<unknown>"}")
-```#### Add wallet with external signer (e.g., hardware wallet):
+println("Address: $address")
+println("Balance: $balance")
+```
+
+#### Add wallet with external signer (e.g., hardware wallet):
 ```kotlin
 import io.ton.walletkit.model.WalletSigner
-import io.ton.walletkit.model.KeyPair
+import io.ton.walletkit.model.TONHex
 
 // Create custom signer implementation
 val customSigner = object : WalletSigner {
-    override val publicKey: ByteArray = // ... your public key from hardware wallet
-    
-    override suspend fun sign(data: ByteArray): ByteArray {
-        // Forward to external signing service (e.g., hardware wallet)
-        // Show confirmation dialog and get signature
-        return signature
+    // Return the public key from your hardware wallet / external signer.
+    override fun publicKey(): TONHex = TONHex.fromData(hardwareWalletPublicKey)
+
+    override suspend fun sign(data: ByteArray): TONHex {
+        // Forward `data` to your external signer, show a confirmation
+        // dialog if needed, and return the resulting signature.
+        return TONHex.fromData(externalSignature)
     }
 }
 
@@ -115,7 +118,7 @@ val adapter = kit.createV4R2Adapter(
 )
 
 // Step 3: Add wallet
-val wallet = kit.addWallet(adapter.adapterId)
+val wallet = kit.addWallet(adapter)
 ```
 
 #### Get all wallets:
@@ -125,7 +128,7 @@ val wallets = kit.getWallets()
 
 #### Remove wallet:
 ```kotlin
-kit.removeWallet(wallet.address)
+kit.removeWallet(wallet.identifier())
 ```
 
 #### Clean up when done:

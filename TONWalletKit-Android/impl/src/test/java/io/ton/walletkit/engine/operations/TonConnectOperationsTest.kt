@@ -262,8 +262,8 @@ class TonConnectOperationsTest : OperationsTestBase() {
     // --- approveTransaction tests ---
 
     @Test
-    fun approveTransaction_completesSuccessfully() = runBlocking {
-        givenBridgeReturns(JsonObject(emptyMap()))
+    fun approveTransaction_returnsApprovalResponse() = runBlocking {
+        givenBridgeReturns(buildJsonObject { put("signedBoc", "te6cckEBAQEAAgAAAEysuc0=") })
 
         val event = createTransactionRequestEvent(
             id = "tx-req-123",
@@ -271,8 +271,8 @@ class TonConnectOperationsTest : OperationsTestBase() {
             walletId = TEST_WALLET_ID,
         )
 
-        // Should not throw
-        rpcClient.approveTransaction(event)
+        val response = rpcClient.approveTransaction(event)
+        assertEquals("te6cckEBAQEAAgAAAEysuc0=", response.signedBoc.value)
     }
 
     // --- rejectTransaction tests ---

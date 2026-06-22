@@ -110,8 +110,8 @@ object PreviewData {
         hash = "abc123def456hash789preview",
         timestamp = System.currentTimeMillis() - 3600000, // 1 hour ago
         isOutgoing = true,
-        amount = "1.5 TON",
-        fee = "0.005 TON",
+        amount = "1.5 GRAM",
+        fee = "0.005 GRAM",
         fromAddress = wallet.address,
         toAddress = "EQrecipientAddressForPreviewTest12345678",
         comment = "Payment for services",

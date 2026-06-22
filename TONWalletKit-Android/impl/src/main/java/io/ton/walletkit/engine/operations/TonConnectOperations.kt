@@ -138,10 +138,10 @@ internal suspend fun BridgeRpcClient.rejectConnect(
 internal suspend fun BridgeRpcClient.approveTransaction(
     event: TONSendTransactionRequestEvent,
     response: TONSendTransactionApprovalResponse? = null,
-) {
+): TONSendTransactionApprovalResponse {
     event.walletAddress ?: throw WalletKitBridgeException(ERROR_WALLET_ADDRESS_REQUIRED)
     event.walletId ?: throw WalletKitBridgeException(ERROR_WALLET_ID_REQUIRED)
-    send(BridgeMethodConstants.METHOD_APPROVE_TRANSACTION_REQUEST, listOf(event, response))
+    return callTyped(BridgeMethodConstants.METHOD_APPROVE_TRANSACTION_REQUEST, listOf(event, response))
 }
 
 internal suspend fun BridgeRpcClient.rejectTransaction(
@@ -156,10 +156,10 @@ internal suspend fun BridgeRpcClient.rejectTransaction(
 internal suspend fun BridgeRpcClient.approveSignData(
     event: TONSignDataRequestEvent,
     response: TONSignDataApprovalResponse? = null,
-) {
+): TONSignDataApprovalResponse {
     event.walletAddress ?: throw WalletKitBridgeException(ERROR_WALLET_ADDRESS_REQUIRED)
     event.walletId ?: throw WalletKitBridgeException(ERROR_WALLET_ID_REQUIRED)
-    send(BridgeMethodConstants.METHOD_APPROVE_SIGN_DATA_REQUEST, listOf(event, response))
+    return callTyped(BridgeMethodConstants.METHOD_APPROVE_SIGN_DATA_REQUEST, listOf(event, response))
 }
 
 internal suspend fun BridgeRpcClient.rejectSignData(
@@ -173,10 +173,10 @@ internal suspend fun BridgeRpcClient.rejectSignData(
 internal suspend fun BridgeRpcClient.approveSignMessage(
     event: TONSignMessageRequestEvent,
     response: TONSignMessageApprovalResponse? = null,
-) {
+): TONSignMessageApprovalResponse {
     event.walletAddress ?: throw WalletKitBridgeException(ERROR_WALLET_ADDRESS_REQUIRED)
     event.walletId ?: throw WalletKitBridgeException(ERROR_WALLET_ID_REQUIRED)
-    send(BridgeMethodConstants.METHOD_APPROVE_SIGN_MESSAGE_REQUEST, listOf(event, response))
+    return callTyped(BridgeMethodConstants.METHOD_APPROVE_SIGN_MESSAGE_REQUEST, listOf(event, response))
 }
 
 internal suspend fun BridgeRpcClient.rejectSignMessage(

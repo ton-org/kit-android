@@ -161,9 +161,9 @@ private fun buildAssetList(
     val tonAmount = trimFraction(rawBalance, maxFractionDigits)
     val tonItem = WalletHomeAssetItem(
         id = "ton",
-        name = "Toncoin",
-        symbol = "TON",
-        formattedAmount = "$tonAmount TON",
+        name = "Gram",
+        symbol = "GRAM",
+        formattedAmount = "$tonAmount GRAM",
         amountValue = rawBalance?.toDoubleOrNull() ?: 0.0,
         icon = WalletHomeAssetIcon.Ton,
     )
@@ -452,6 +452,7 @@ fun WalletScreen(
                 WalletKitInvestigationScreen(
                     onBack = { subScreen = HomeSubScreen.None },
                     onConnect = actions::onHandleUrl,
+                    walletKit = walletKit,
                 )
             }
             HomeSubScreen.None -> Unit
@@ -540,7 +541,7 @@ fun WalletScreen(
 
             WalletHomeContent(
                 totalBalance = totalBalance,
-                balanceSuffix = " TON",
+                balanceSuffix = " GRAM",
                 balanceMaxFractionDigits = MAX_FRACTION_DIGITS,
                 truncatedAddress = WalletHomeTopBar.shortAddress(homeAddress),
                 onCopyAddress = {

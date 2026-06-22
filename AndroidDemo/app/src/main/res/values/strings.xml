@@ -90,7 +90,7 @@
     <string name="wallet_switcher_remove_title">Remove Wallet?</string>
     <string name="wallet_switcher_remove_message">Are you sure you want to remove this wallet?</string>
     <string name="wallet_switcher_remove_warning">This will switch to another wallet.</string>
-    <string name="wallet_switcher_balance_format">%1$s TON</string>
+    <string name="wallet_switcher_balance_format">%1$s GRAM</string>
     <string name="wallet_switcher_active_badge">Active</string>
 
     <!-- Sessions -->
@@ -221,17 +221,17 @@
     <string name="transactions_sent">Sent</string>
     <string name="transactions_received">Received</string>
     <string name="transactions_unknown_time">Unknown time</string>
-    <string name="transactions_amount_outgoing">-%1$s TON</string>
-    <string name="transactions_amount_incoming">+%1$s TON</string>
+    <string name="transactions_amount_outgoing">-%1$s GRAM</string>
+    <string name="transactions_amount_incoming">+%1$s GRAM</string>
 
     <!-- Send transaction -->
-    <string name="send_title">Send TON</string>
+    <string name="send_title">Send GRAM</string>
     <string name="send_from_label">From</string>
-    <string name="send_balance_format">Balance: %1$s TON</string>
+    <string name="send_balance_format">Balance: %1$s GRAM</string>
     <string name="send_recipient_label">Recipient Address</string>
     <string name="send_recipient_placeholder">EQ... or UQ...</string>
     <string name="send_recipient_error">Invalid TON address</string>
-    <string name="send_amount_label">Amount (TON)</string>
+    <string name="send_amount_label">Amount (GRAM)</string>
     <string name="send_amount_placeholder">0.00</string>
     <string name="send_amount_error">Invalid amount</string>
     <string name="send_amount_insufficient">Insufficient balance</string>
@@ -298,7 +298,7 @@
     <string name="wallet_event_wallet_renamed">Renamed wallet to: %1$s</string>
     <string name="wallet_default_name">Wallet %1$d</string>
     <string name="wallet_transaction_unknown_party">Unknown</string>
-    <string name="wallet_transaction_fee_default">0 TON</string>
+    <string name="wallet_transaction_fee_default">0 GRAM</string>
     <string name="wallet_transaction_status_success">Success</string>
     <string name="wallet_error_prepare_demo_wallet">Failed to prepare demo wallet</string>
     <string name="wallet_permission_unknown_name">unknown</string>

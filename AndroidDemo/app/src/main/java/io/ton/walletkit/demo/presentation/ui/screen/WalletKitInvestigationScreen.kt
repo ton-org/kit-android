@@ -19,8 +19,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+@file:SuppressLint("SetJavaScriptEnabled")
+
 package io.ton.walletkit.demo.presentation.ui.screen
 
+import android.annotation.SuppressLint
+import android.view.ViewGroup
+import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -40,34 +45,51 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import io.ton.walletkit.ITONWalletKit
 import io.ton.walletkit.demo.R
 import io.ton.walletkit.demo.designsystem.components.text.TonText
 import io.ton.walletkit.demo.designsystem.theme.SmoothCornerShape
 import io.ton.walletkit.demo.designsystem.theme.TonTheme
 import io.ton.walletkit.demo.presentation.ui.dialog.UrlPromptDialog
+import io.ton.walletkit.demo.presentation.ui.screen.iframesec.RealBridgeIframeCase
+import io.ton.walletkit.demo.presentation.ui.screen.iframesec.WalletKitRealBridgeIframeScreen
 import io.ton.walletkit.demo.presentation.util.QrScanner
+import io.ton.walletkit.extensions.injectTonConnect
+
+private enum class InvestigationPage { Tonconnect, DappWebView, RealBridge }
 
 /**
  * Developer "Wallet Kit Investigation" screen: a list of debug tools reached from the wallet-home
- * gear icon. Currently one entry — Tonconnect, which opens a page with "Connect to dApp" (paste a
- * link) and "Scan QR code" actions to connect the active wallet.
+ * gear icon. Hosts the TonConnect helper plus the iframe-security investigation screens (synthetic
+ * diagnostic matrix and the real-bridge matrix) and a plain dApp WebView.
  */
 @Composable
 fun WalletKitInvestigationScreen(
     onBack: () -> Unit,
     onConnect: (String) -> Unit,
+    walletKit: ITONWalletKit,
     modifier: Modifier = Modifier,
 ) {
-    var showTonconnect by remember { mutableStateOf(false) }
+    var page by remember { mutableStateOf<InvestigationPage?>(null) }
 
-    if (showTonconnect) {
-        BackHandler { showTonconnect = false }
-        WalletKitTonconnectScreen(
-            onBack = { showTonconnect = false },
-            onConnect = onConnect,
-            modifier = modifier,
-        )
-        return
+    when (page) {
+        InvestigationPage.Tonconnect -> {
+            BackHandler { page = null }
+            WalletKitTonconnectScreen(onBack = { page = null }, onConnect = onConnect, modifier = modifier)
+            return
+        }
+        InvestigationPage.DappWebView -> {
+            BackHandler { page = null }
+            DappWebViewScreen(onBack = { page = null }, walletKit = walletKit, modifier = modifier)
+            return
+        }
+        InvestigationPage.RealBridge -> {
+            BackHandler { page = null }
+            WalletKitRealBridgeIframeScreen(walletKit = walletKit, onBack = { page = null }, modifier = modifier)
+            return
+        }
+        null -> Unit
     }
 
     Column(
@@ -84,7 +106,12 @@ fun WalletKitInvestigationScreen(
         ) {
             InvestigationRow(
                 title = stringResource(R.string.investigation_tonconnect),
-                onClick = { showTonconnect = true },
+                onClick = { page = InvestigationPage.Tonconnect },
+            )
+            InvestigationRow(title = "dApp WebView", onClick = { page = InvestigationPage.DappWebView })
+            InvestigationRow(
+                title = "Iframe Security — Real dApp Bridge",
+                onClick = { page = InvestigationPage.RealBridge },
             )
         }
     }
@@ -137,6 +164,37 @@ private fun WalletKitTonconnectScreen(
             onConfirm = { url ->
                 showPrompt = false
                 onConnect(url)
+            },
+        )
+    }
+}
+
+/** Minimal dApp WebView with the real WalletKit injection — mirrors the iOS investigation entry. */
+@Composable
+private fun DappWebViewScreen(
+    onBack: () -> Unit,
+    walletKit: ITONWalletKit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(TonTheme.colors.bgSecondary),
+    ) {
+        SubScreenTopBar(title = "dApp WebView", onBack = onBack)
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    injectTonConnect(walletKit)
+                    loadUrl(RealBridgeIframeCase.DAPP_URL)
+                }
             },
         )
     }

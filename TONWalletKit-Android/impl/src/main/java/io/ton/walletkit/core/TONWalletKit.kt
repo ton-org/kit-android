@@ -210,7 +210,7 @@ internal class TONWalletKit private constructor(
         return TONStreamingProviderImpl(engine = engine, network = config.network, identifier = result.optString("providerId"))
     }
 
-    override fun streaming(): ITONStreamingManager {
+    override suspend fun streaming(): ITONStreamingManager {
         checkNotDestroyed()
         return streamingManager
     }
@@ -498,7 +498,7 @@ internal class TONWalletKit private constructor(
 
     override suspend fun jettons(): ITONJettonsManager = jettonsManager
 
-    override fun staking(): ITONStakingManager {
+    override suspend fun staking(): ITONStakingManager {
         checkNotDestroyed()
         return _stakingManager
     }

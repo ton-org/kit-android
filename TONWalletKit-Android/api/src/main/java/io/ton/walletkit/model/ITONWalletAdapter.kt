@@ -28,39 +28,55 @@ import io.ton.walletkit.api.generated.TONTransactionRequest
 import io.ton.walletkit.client.TONAPIClient
 import io.ton.walletkit.config.TONWalletKitConfiguration
 
+/**
+ * The account-level signing contract for a wallet. Implemented by ITONWallet, or directly to back a
+ * custom/hardware wallet for `ITONWalletKit.addWallet`. Suspend members may throw
+ * WalletKitBridgeException. On the `signed*` members, `fakeSignature = true` produces a placeholder
+ * signature for emulation.
+ */
 interface ITONWalletAdapter {
+    /** Stable wallet/adapter identifier (also the wallet id). */
     fun identifier(): String
 
+    /** The wallet's Ed25519 public key. */
     suspend fun publicKey(): TONHex
 
+    /** The network this adapter operates on. */
     fun network(): TONNetwork
 
+    /** The API client bound to this adapter's network. */
     fun client(): TONAPIClient
 
+    /** The wallet's user-friendly address ([testnet] selects the testnet encoding). */
     fun address(testnet: Boolean = false): TONUserFriendlyAddress
 
-    /** State init (base64 BOC) for contract deployment. */
+    /** State init (base64 BOC) for first-use contract deployment. */
     suspend fun stateInit(): TONBase64
 
+    /** Sign a transaction into a broadcastable external-message BoC. */
     suspend fun signedSendTransaction(
         input: TONTransactionRequest,
         fakeSignature: Boolean? = null,
     ): TONBase64
 
+    /** Sign a transaction as an internal sign-message BoC (gasless relay flows). */
     suspend fun signedSignMessage(
         input: TONTransactionRequest,
         fakeSignature: Boolean? = null,
     ): TONBase64
 
+    /** Sign prepared data (TON Connect signData); returns hex. */
     suspend fun signedSignData(
         input: TONPreparedSignData,
         fakeSignature: Boolean? = null,
     ): TONHex
 
+    /** Sign a TON Proof challenge; returns hex. */
     suspend fun signedTonProof(
         input: TONProofMessage,
         fakeSignature: Boolean? = null,
     ): TONHex
 
+    /** The wallet features this adapter supports, or null for SDK defaults. */
     fun supportedFeatures(): List<TONWalletKitConfiguration.Feature>? = null
 }

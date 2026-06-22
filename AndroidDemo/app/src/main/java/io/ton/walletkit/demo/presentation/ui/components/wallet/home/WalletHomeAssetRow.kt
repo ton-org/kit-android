@@ -44,10 +44,6 @@ import io.ton.walletkit.demo.designsystem.icons.TonIcon
 import io.ton.walletkit.demo.designsystem.icons.TonIconImage
 import io.ton.walletkit.demo.designsystem.theme.TonTheme
 
-// Mirrors iOS WalletHomeAssetItem.Icon — keeps the icon shape behind a sealed type
-// so we can swap between the bundled TON brand mark, a network image URL, and a
-// last-resort coloured initials placeholder without leaking the resolution to call
-// sites.
 @Immutable
 sealed interface WalletHomeAssetIcon {
     data object Ton : WalletHomeAssetIcon
@@ -110,9 +106,8 @@ private fun AssetIcon(item: WalletHomeAssetItem) {
     ) {
         when (val icon = item.icon) {
             WalletHomeAssetIcon.Ton -> TonIconImage(
-                icon = TonIcon.Ton,
+                icon = TonIcon.Gram,
                 size = IconSize,
-                // No tint — TON brand mark ships its blue + white fills baked into the SVG.
             )
             is WalletHomeAssetIcon.Url -> AsyncImage(
                 model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)

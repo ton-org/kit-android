@@ -95,7 +95,7 @@ fun WalletHomeBalance(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            TonIconImage(icon = TonIcon.Ton, size = 16.dp)
+            TonIconImage(icon = TonIcon.Gram, size = 16.dp)
             TonText(
                 text = truncatedAddress,
                 style = TonTheme.typography.subheadline2,
