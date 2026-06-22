@@ -43,6 +43,7 @@ import io.ton.walletkit.api.generated.TONNetwork
 import io.ton.walletkit.api.generated.TONRawStackItem
 import io.ton.walletkit.api.generated.TONUserNFTsRequest
 import io.ton.walletkit.api.isTestnet
+import io.ton.walletkit.bridge.BridgeDispatchException
 import io.ton.walletkit.bridge.BuildConfig
 import io.ton.walletkit.bridge.optString
 import io.ton.walletkit.bridge.optStringOrNull
@@ -302,7 +303,7 @@ internal class WebViewManager(
 
         private fun requireAdapter(params: JsonObject) =
             adapterManager.getAdapter(params.optString("adapterId"))
-                ?: throw IllegalArgumentException("Adapter not found: ${params.optString("adapterId")}")
+                ?: throw BridgeDispatchException.AdapterNotFound(params.optString("adapterId"))
 
         private suspend fun dispatch(method: String, params: JsonObject): String {
             // Lazy so adapter-only calls (which carry no chainId) never trigger client resolution.
@@ -346,19 +347,19 @@ internal class WebViewManager(
                 }
                 "api.getAccountStates" -> {
                     val addresses = json.decodeFromJsonElement<List<String>>(
-                        params["addresses"] ?: throw IllegalArgumentException("api.getAccountStates: missing addresses"),
+                        params["addresses"] ?: throw BridgeDispatchException.MissingParameter("api.getAccountStates", "addresses"),
                     ).map { TONUserFriendlyAddress.parse(it) }
                     json.encodeToString(client.accountStates(addresses).mapKeys { it.key.value })
                 }
                 "api.nftItemsByAddress" -> {
                     val request = json.decodeFromJsonElement<TONNFTsRequest>(
-                        params["request"] ?: throw IllegalArgumentException("api.nftItemsByAddress: missing request"),
+                        params["request"] ?: throw BridgeDispatchException.MissingParameter("api.nftItemsByAddress", "request"),
                     )
                     json.encodeToString(client.nftItemsByAddress(request))
                 }
                 "api.nftItemsByOwner" -> {
                     val request = json.decodeFromJsonElement<TONUserNFTsRequest>(
-                        params["request"] ?: throw IllegalArgumentException("api.nftItemsByOwner: missing request"),
+                        params["request"] ?: throw BridgeDispatchException.MissingParameter("api.nftItemsByOwner", "request"),
                     )
                     json.encodeToString(client.nftItemsByOwner(request))
                 }
@@ -366,14 +367,14 @@ internal class WebViewManager(
                 "api.resolveDnsWallet" -> client.resolveDnsWallet(params.optString("domain")) ?: ""
                 "api.backResolveDnsWallet" ->
                     client.backResolveDnsWallet(TONUserFriendlyAddress.parse(params.optString("address"))) ?: ""
-                else -> throw IllegalArgumentException("Unknown bridge method: $method")
+                else -> throw BridgeDispatchException.UnknownMethod(method)
             }
         }
 
         private fun clientForParams(params: JsonObject): TONAPIClient {
             val chainId = params.optString("chainId")
             return apiClients[TONNetwork(chainId)]
-                ?: throw IllegalArgumentException("No API client configured for chainId=$chainId")
+                ?: throw BridgeDispatchException.ApiClientNotConfigured(chainId)
         }
 
         // ======== Session Manager Methods ========
@@ -392,7 +393,7 @@ internal class WebViewManager(
             isJsBridge: Boolean,
         ): String {
             val manager = sessionManager
-                ?: throw IllegalStateException("Session manager not configured")
+                ?: throw BridgeDispatchException.SessionManagerNotConfigured()
 
             return runBlocking {
                 try {
@@ -425,7 +426,7 @@ internal class WebViewManager(
         @JavascriptInterface
         fun sessionGet(sessionId: String): String? {
             val manager = sessionManager
-                ?: throw IllegalStateException("Session manager not configured")
+                ?: throw BridgeDispatchException.SessionManagerNotConfigured()
 
             return runBlocking {
                 try {
@@ -442,7 +443,7 @@ internal class WebViewManager(
         @JavascriptInterface
         fun sessionGetFiltered(filterJson: String): String {
             val manager = sessionManager
-                ?: throw IllegalStateException("Session manager not configured")
+                ?: throw BridgeDispatchException.SessionManagerNotConfigured()
 
             return runBlocking {
                 try {
@@ -459,7 +460,7 @@ internal class WebViewManager(
         @JavascriptInterface
         fun sessionRemove(sessionId: String) {
             val manager = sessionManager
-                ?: throw IllegalStateException("Session manager not configured")
+                ?: throw BridgeDispatchException.SessionManagerNotConfigured()
 
             runBlocking {
                 try {
@@ -473,7 +474,7 @@ internal class WebViewManager(
         @JavascriptInterface
         fun sessionRemoveFiltered(filterJson: String) {
             val manager = sessionManager
-                ?: throw IllegalStateException("Session manager not configured")
+                ?: throw BridgeDispatchException.SessionManagerNotConfigured()
 
             runBlocking {
                 try {
@@ -488,7 +489,7 @@ internal class WebViewManager(
         @JavascriptInterface
         fun sessionClear() {
             val manager = sessionManager
-                ?: throw IllegalStateException("Session manager not configured")
+                ?: throw BridgeDispatchException.SessionManagerNotConfigured()
 
             runBlocking {
                 try {

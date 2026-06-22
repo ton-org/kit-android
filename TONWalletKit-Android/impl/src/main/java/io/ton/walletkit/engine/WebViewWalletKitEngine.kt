@@ -22,6 +22,7 @@
 package io.ton.walletkit.engine
 
 import android.content.Context
+import io.ton.walletkit.TONWalletKitException
 import io.ton.walletkit.WalletKitBridgeException
 import io.ton.walletkit.api.generated.TONAccountState
 import io.ton.walletkit.api.generated.TONConnectionApprovalResponse
@@ -319,7 +320,7 @@ internal class WebViewWalletKitEngine private constructor(
 
     private suspend fun call(method: String, params: Any? = null): JsonObject {
         if (isDestroyed) {
-            throw WalletKitBridgeException("Cannot call method '$method' - SDK has been destroyed")
+            throw TONWalletKitException.Destroyed(method)
         }
         return rpcClient.call(method, params)
     }

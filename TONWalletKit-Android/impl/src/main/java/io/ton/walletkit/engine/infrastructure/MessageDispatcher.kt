@@ -31,6 +31,7 @@ import io.ton.walletkit.api.generated.TONStakingQuoteParams
 import io.ton.walletkit.api.generated.TONSwapParams
 import io.ton.walletkit.api.generated.TONSwapQuoteParams
 import io.ton.walletkit.api.generated.TONTransactionRequest
+import io.ton.walletkit.bridge.BridgeDispatchException
 import io.ton.walletkit.bridge.dispatch.AdapterByIdRequest
 import io.ton.walletkit.bridge.dispatch.AdapterSignDataRequest
 import io.ton.walletkit.bridge.dispatch.AdapterSignTonProofRequest
@@ -115,7 +116,7 @@ internal class MessageDispatcher(
     private val requestRegistry: BridgeRequestRegistry = BridgeRequestRegistry(json).apply {
         registerTypedJson<SignWithCustomSignerRequest, String>(REQUEST_METHOD_SIGN_WITH_CUSTOM_SIGNER) { req ->
             val signer = signerManager.getSigner(req.signerId)
-                ?: throw IllegalArgumentException("Custom signer not found: ${req.signerId}")
+                ?: throw BridgeDispatchException.SignerNotFound(req.signerId)
             signer.sign(req.data).value
         }
 
@@ -298,7 +299,7 @@ internal class MessageDispatcher(
 
     private fun requireAdapter(adapterId: String) =
         adapterManager.getAdapter(adapterId)
-            ?: throw IllegalArgumentException("Adapter not found: $adapterId")
+            ?: throw BridgeDispatchException.AdapterNotFound(adapterId)
 
     private fun respondToJs(id: String, result: String?, errorMessage: String?) {
         val envelope = buildJsonObject {

@@ -21,6 +21,7 @@
  */
 package io.ton.walletkit.bridge.dispatch
 
+import io.ton.walletkit.bridge.BridgeDispatchException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.serializer
@@ -71,7 +72,7 @@ internal class WrappedFunctionRegistry(
     /** Invokes the callback bound to [refId]. The returned String is already JSON-encoded. */
     suspend fun invoke(refId: String, args: JsonArray): String {
         val fn = functions[refId]
-            ?: throw IllegalArgumentException("No wrapped function registered for reference: $refId")
+            ?: throw BridgeDispatchException.WrappedFunctionNotRegistered(refId)
         return fn(args)
     }
 }

@@ -89,6 +89,19 @@ data class TONHex(
         fun fromString(string: String, withPrefix: Boolean = true): TONHex {
             return fromData(string.toByteArray(Charsets.UTF_8), withPrefix)
         }
+
+        /**
+         * Parses a hex string, validating it upfront.
+         *
+         * @throws TONHexValidationException if [value] is not a valid hex string.
+         */
+        fun parse(value: String): TONHex {
+            val hex = TONHex(value)
+            if (hex.data == null) {
+                throw TONHexValidationException(value)
+            }
+            return hex
+        }
     }
 
     override fun toString(): String = value
@@ -111,3 +124,12 @@ object TONHexSerializer : KSerializer<TONHex> {
         return TONHex(decoder.decodeString())
     }
 }
+
+/**
+ * Raised when a string fails [TONHex] validation.
+ *
+ * @property invalidValue The string that was not a valid hex string.
+ */
+class TONHexValidationException(
+    val invalidValue: String,
+) : IllegalArgumentException("$invalidValue is not a valid hex string.")
