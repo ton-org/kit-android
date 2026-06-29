@@ -73,12 +73,12 @@ fun SendTransactionScreen(
     walletKit: ITONWalletKit,
     onBack: () -> Unit,
 ) {
-    var tonWallet by remember(wallet.address) { mutableStateOf<ITONWallet?>(null) }
-    var resolving by remember(wallet.address) { mutableStateOf(true) }
+    var tonWallet by remember(wallet.walletId) { mutableStateOf<ITONWallet?>(null) }
+    var resolving by remember(wallet.walletId) { mutableStateOf(true) }
 
-    LaunchedEffect(wallet.address) {
+    LaunchedEffect(wallet.walletId) {
         resolving = true
-        tonWallet = walletKit.getWallets().firstOrNull { it.address().value == wallet.address }
+        tonWallet = walletKit.getWallet(wallet.walletId)
         resolving = false
     }
 

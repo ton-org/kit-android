@@ -30,7 +30,7 @@ data class WalletUiState(
     val initialized: Boolean = false,
     val status: String = "",
     val wallets: List<WalletSummary> = emptyList(),
-    val activeWalletAddress: String? = null,
+    val activeWalletId: String? = null,
     val sessions: List<SessionSummary> = emptyList(),
     val sheetState: SheetState = SheetState.None,
     val previousSheet: SheetState? = null, // Used to restore sheet after modal interactions

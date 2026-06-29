@@ -16,6 +16,7 @@ kotlinxSerialization = "1.9.0"
 tinkAndroid = "1.20.0"
 walletkitAndroid = "0.0.1"
 webkit = "1.15.0"
+tracing = "1.2.0"
 datastorePreferences = "1.2.0"
 securityCrypto = "1.1.0"
 biometric = "1.2.0-alpha05"
@@ -52,6 +53,7 @@ androidxLifecycleViewmodelCompose = { module = "androidx.lifecycle:lifecycle-vie
 kotlinxCoroutinesAndroid = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutinesAndroid" }
 kotlinxSerializationJson = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 androidxWebkit = { module = "androidx.webkit:webkit", version.ref = "webkit" }
+androidxTracing = { module = "androidx.tracing:tracing", version.ref = "tracing" }
 androidxDatastorePreferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
 androidxSecurityCrypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
 androidxBiometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }

@@ -76,7 +76,7 @@ import io.ton.walletkit.demo.presentation.ui.preview.PreviewData
 @Composable
 fun WalletSwitcher(
     wallets: List<WalletSummary>,
-    activeWalletAddress: String?,
+    activeWalletId: String?,
     isExpanded: Boolean,
     onToggle: () -> Unit,
     onSwitchWallet: (String) -> Unit,
@@ -84,29 +84,29 @@ fun WalletSwitcher(
     onRenameWallet: (String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var editingWalletAddress by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingWalletId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingName by rememberSaveable { mutableStateOf("") }
     var walletToDelete by remember { mutableStateOf<WalletSummary?>(null) }
 
-    val activeWallet = wallets.firstOrNull { it.address == activeWalletAddress }
+    val activeWallet = wallets.firstOrNull { it.walletId == activeWalletId }
 
     fun startEdit(wallet: WalletSummary) {
-        editingWalletAddress = wallet.address
+        editingWalletId = wallet.walletId
         editingName = wallet.name
     }
 
     fun saveEdit() {
-        editingWalletAddress?.let { address ->
+        editingWalletId?.let { walletId ->
             if (editingName.isNotBlank()) {
-                onRenameWallet(address, editingName.trim())
+                onRenameWallet(walletId, editingName.trim())
             }
-            editingWalletAddress = null
+            editingWalletId = null
             editingName = ""
         }
     }
 
     fun cancelEdit() {
-        editingWalletAddress = null
+        editingWalletId = null
         editingName = ""
     }
 
@@ -188,8 +188,8 @@ fun WalletSwitcher(
                     verticalArrangement = Arrangement.spacedBy(WALLET_LIST_ITEM_SPACING),
                 ) {
                     wallets.forEach { wallet ->
-                        val isActive = wallet.address == activeWalletAddress
-                        val isEditing = editingWalletAddress == wallet.address
+                        val isActive = wallet.walletId == activeWalletId
+                        val isEditing = editingWalletId == wallet.walletId
 
                         OutlinedCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -277,7 +277,7 @@ fun WalletSwitcher(
 
                                         Row {
                                             if (!isActive) {
-                                                IconButton(onClick = { onSwitchWallet(wallet.address) }) {
+                                                IconButton(onClick = { onSwitchWallet(wallet.walletId) }) {
                                                     Icon(
                                                         imageVector = Icons.Default.SwapHoriz,
                                                         contentDescription = stringResource(R.string.action_switch),
@@ -327,7 +327,7 @@ fun WalletSwitcher(
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                     )
-                    if (wallet.address == activeWalletAddress && wallets.size > 1) {
+                    if (wallet.walletId == activeWalletId && wallets.size > 1) {
                         Spacer(modifier = Modifier.height(DIALOG_SPACING))
                         Text(
                             text = stringResource(R.string.wallet_switcher_remove_warning),
@@ -340,7 +340,7 @@ fun WalletSwitcher(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onRemoveWallet(wallet.address)
+                        onRemoveWallet(wallet.walletId)
                         walletToDelete = null
                     },
                 ) {
@@ -380,11 +380,13 @@ private fun WalletSwitcherPreview() {
     val wallets = listOf(
         PreviewData.wallet,
         PreviewData.wallet.copy(
+            walletId = "wallet-2",
             address = "EQD9876543210",
             name = "Wallet 2",
             balance = "123.45",
         ),
         PreviewData.wallet.copy(
+            walletId = "wallet-3",
             address = "EQD1111111111",
             name = "Wallet 3",
             balance = "0.50",
@@ -393,7 +395,7 @@ private fun WalletSwitcherPreview() {
 
     WalletSwitcher(
         wallets = wallets,
-        activeWalletAddress = wallets.first().address,
+        activeWalletId = wallets.first().walletId,
         isExpanded = true,
         onToggle = {},
         onSwitchWallet = {},

@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
  * Sending tokens is handled by [SendTokensViewModel].
  */
 class WalletOperationsViewModel(
-    private val getWalletByAddress: (String) -> ITONWallet?,
+    private val getWalletById: (String) -> ITONWallet?,
     private val onWalletSwitched: (String) -> Unit = {},
 ) : ViewModel() {
 
@@ -43,7 +43,7 @@ class WalletOperationsViewModel(
     val state: StateFlow<WalletOperationsState> = _state.asStateFlow()
 
     data class WalletOperationsState(
-        val activeWalletAddress: String? = null,
+        val activeWalletId: String? = null,
         val isSendingTransaction: Boolean = false,
         val error: String? = null,
         val successMessage: String? = null,
@@ -52,20 +52,20 @@ class WalletOperationsViewModel(
     /**
      * Switch to a different wallet.
      */
-    fun switchWallet(address: String) {
+    fun switchWallet(walletId: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(error = null)
 
-            val wallet = getWalletByAddress(address)
+            val wallet = getWalletById(walletId)
             if (wallet == null) {
                 _state.value = _state.value.copy(error = "Wallet not found")
                 return@launch
             }
 
-            _state.value = _state.value.copy(activeWalletAddress = address)
-            onWalletSwitched(address)
+            _state.value = _state.value.copy(activeWalletId = walletId)
+            onWalletSwitched(walletId)
 
-            Log.d(TAG, "Switched to wallet: $address")
+            Log.d(TAG, "Switched to wallet: $walletId")
         }
     }
 

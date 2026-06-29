@@ -23,6 +23,7 @@ package io.ton.walletkit.engine.infrastructure
 
 import android.os.Handler
 import android.webkit.WebView
+import androidx.tracing.Trace
 import io.ton.walletkit.WalletKitBridgeException
 import io.ton.walletkit.api.generated.TONPreparedSignData
 import io.ton.walletkit.api.generated.TONProofMessage
@@ -79,6 +80,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Routes messages coming from the JavaScript bridge to the appropriate engine components.
@@ -107,6 +109,7 @@ internal class MessageDispatcher(
 ) {
     private val mainHandler: Handler = webViewManager.getMainHandler()
     private val eventListenersSetupMutex = Mutex()
+    private val traceCookie = AtomicInteger(0)
 
     private val _streamingEvents = MutableSharedFlow<StreamingEvent>(extraBufferCapacity = 64)
     val streamingEvents: SharedFlow<StreamingEvent> = _streamingEvents.asSharedFlow()
@@ -280,12 +283,17 @@ internal class MessageDispatcher(
         }
 
         CoroutineScope(Dispatchers.IO).launch {
+            val traceLabel = TRACE_REVERSE + method
+            val cookie = traceCookie.getAndIncrement()
+            Trace.beginAsyncSection(traceLabel, cookie)
             try {
                 val result = executeNativeRequest(method, params)
                 respondToJs(id, result, null)
             } catch (e: Exception) {
                 Logger.e(TAG, "Reverse-RPC request failed: method=$method", e)
                 respondToJs(id, null, e.message ?: "Unknown error")
+            } finally {
+                Trace.endAsyncSection(traceLabel, cookie)
             }
         }
     }
@@ -470,6 +478,8 @@ internal class MessageDispatcher(
         private const val ERROR_FAILED_SET_UP_EVENT_LISTENERS = "Failed to set up event listeners: "
 
         private const val EMPTY_JSON_OBJECT = "{}"
+
+        private const val TRACE_REVERSE = "WalletKit.reverse:"
 
         // Reverse-RPC method names (must match the JS bridgeRequest() method strings)
         private const val REQUEST_METHOD_SIGN_WITH_CUSTOM_SIGNER = "signWithCustomSigner"

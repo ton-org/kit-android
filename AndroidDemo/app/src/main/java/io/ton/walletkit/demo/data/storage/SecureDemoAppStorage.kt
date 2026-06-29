@@ -133,7 +133,7 @@ class SecureDemoAppStorage(context: Context) : DemoAppStorage {
 
     override suspend fun saveUserPreferences(preferences: UserPreferences): Unit = withContext(Dispatchers.IO) {
         userPrefs.edit().apply {
-            preferences.activeWalletAddress?.let {
+            preferences.activeWalletId?.let {
                 putString(PREF_ACTIVE_WALLET, it)
             } ?: remove(PREF_ACTIVE_WALLET)
         }.apply()
@@ -143,7 +143,7 @@ class SecureDemoAppStorage(context: Context) : DemoAppStorage {
     override suspend fun loadUserPreferences(): UserPreferences? = withContext(Dispatchers.IO) {
         val activeWallet = userPrefs.getString(PREF_ACTIVE_WALLET, null)
         if (activeWallet != null) {
-            UserPreferences(activeWalletAddress = activeWallet)
+            UserPreferences(activeWalletId = activeWallet)
         } else {
             null
         }
@@ -201,7 +201,7 @@ class SecureDemoAppStorage(context: Context) : DemoAppStorage {
         private const val WALLET_PREFS_NAME = "walletkit_demo_wallets"
         private const val USER_PREFS_NAME = "walletkit_demo_prefs"
         private const val WALLET_PREFIX = "wallet:"
-        private const val PREF_ACTIVE_WALLET = "active_wallet_address"
+        private const val PREF_ACTIVE_WALLET = "active_wallet_id"
         private const val PREF_PASSWORD_HASH = "password_hash"
         private const val KEY_MNEMONIC = "mnemonic"
         private const val KEY_NAME = "name"

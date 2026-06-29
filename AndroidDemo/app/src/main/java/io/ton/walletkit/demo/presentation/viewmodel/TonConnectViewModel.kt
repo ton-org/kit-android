@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
  */
 class TonConnectViewModel(
     private val walletKit: () -> ITONWalletKit,
-    private val getWalletByAddress: (String) -> ITONWallet?,
+    private val getWalletById: (String) -> ITONWallet?,
     private val onRequestApproved: () -> Unit = {},
     private val onRequestRejected: () -> Unit = {},
     private val onRequestFailed: (String) -> Unit = {},
@@ -63,11 +63,11 @@ class TonConnectViewModel(
     /**
      * Handle a TON Connect URL (universal link or QR code).
      */
-    fun handleTonConnectUrl(url: String, walletAddress: String) {
+    fun handleTonConnectUrl(url: String, walletId: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isProcessing = true, error = null)
 
-            val wallet = getWalletByAddress(walletAddress)
+            val wallet = getWalletById(walletId)
             if (wallet == null) {
                 _state.value = _state.value.copy(
                     isProcessing = false,
@@ -124,13 +124,13 @@ class TonConnectViewModel(
     /**
      * Approve a connection request from a dApp.
      */
-    fun approveConnect(request: ConnectRequestUi, walletAddress: String) {
+    fun approveConnect(request: ConnectRequestUi, walletId: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isProcessing = true, error = null)
 
             runCatching {
-                val wallet = getWalletByAddress(walletAddress)
-                    ?: error("Wallet not found for address: $walletAddress")
+                val wallet = getWalletById(walletId)
+                    ?: error("Wallet not found for id: $walletId")
                 val connectRequest = request.connectRequest
                     ?: error("Connect request not available")
                 connectRequest.approve(wallet)
