@@ -24,11 +24,9 @@ package io.ton.walletkit.demo.e2e.dapp
 import android.content.ClipboardManager
 import android.util.Log
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
-import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextClearance
-import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
@@ -122,27 +120,19 @@ class JsDAppController {
     fun openBrowser(url: String = DAPP_URL, injectTonConnect: Boolean = false) {
         jsBridge.clearCache() // Clear any cached WebView reference
 
-        val target = InstrumentationRegistry.getArguments().getString("browserUrl")
-            ?.takeIf { it.isNotBlank() } ?: url
-
-        // Modern path: gear -> Investigation -> dApp Browser -> type URL -> open (inject / no-inject).
-        composeTestRule.onNodeWithTag(TestTags.INVESTIGATION_BUTTON).performClick()
-        composeTestRule.waitUntil(ELEMENT_TIMEOUT) {
-            composeTestRule.onAllNodesWithTag(TestTags.INVESTIGATION_BROWSER_ROW).fetchSemanticsNodes().isNotEmpty()
+        if (injectTonConnect) {
+            composeTestRule.onNodeWithContentDescription("Open TonConnect Browser")
+                .performClick()
+        } else {
+            composeTestRule.onNodeWithTag(TestTags.BROWSER_NO_INJECT_BUTTON)
+                .performClick()
         }
-        composeTestRule.onNodeWithTag(TestTags.INVESTIGATION_BROWSER_ROW).performClick()
 
-        composeTestRule.waitUntil(ELEMENT_TIMEOUT) {
-            composeTestRule.onAllNodesWithTag(TestTags.BROWSER_URL_FIELD).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeTestRule.onNodeWithTag(TestTags.BROWSER_URL_FIELD).performTextClearance()
-        composeTestRule.onNodeWithTag(TestTags.BROWSER_URL_FIELD).performTextInput(target)
-
-        val buttonTag = if (injectTonConnect) TestTags.BROWSER_INJECT_BUTTON else TestTags.BROWSER_NO_INJECT_BUTTON
-        composeTestRule.onNodeWithTag(buttonTag).performClick()
         composeTestRule.waitForIdle()
 
-        Log.d("JsDAppController", "Browser opened ($target, inject=$injectTonConnect), waiting for WebView...")
+        // Wait for WebView to load
+
+        Log.d("JsDAppController", "Browser opened, waiting for WebView...")
     }
 
     /**

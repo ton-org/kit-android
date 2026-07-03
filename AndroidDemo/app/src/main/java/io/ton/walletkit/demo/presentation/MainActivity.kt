@@ -45,7 +45,9 @@ import io.ton.walletkit.demo.designsystem.theme.TonTheme
 import io.ton.walletkit.demo.presentation.actions.WalletActionsImpl
 import io.ton.walletkit.demo.presentation.dev.DevPreferences
 import io.ton.walletkit.demo.presentation.state.CreateWalletFlow
+import io.ton.walletkit.demo.presentation.state.SheetState
 import io.ton.walletkit.demo.presentation.ui.screen.CreatePinScreen
+import io.ton.walletkit.demo.presentation.ui.screen.LegacyWalletScreen
 import io.ton.walletkit.demo.presentation.ui.screen.UnlockPinScreen
 import io.ton.walletkit.demo.presentation.ui.screen.WalletScreen
 import io.ton.walletkit.demo.presentation.ui.screen.onboarding.CreateWalletOnboardingScreen
@@ -130,6 +132,7 @@ private fun AppNavigation(
 
         else -> {
             walletKit.value?.let { kit ->
+                val useLegacyMainScreen by DevPreferences.useLegacyMainScreen.collectAsState()
                 val createFlow by viewModel.createWalletFlow.collectAsState()
                 val walletsBootstrapped = state.walletsBootstrapped
 
@@ -141,10 +144,14 @@ private fun AppNavigation(
                     }
                 }
 
-                LaunchedEffect(hasWallet, walletsBootstrapped) {
+                LaunchedEffect(hasWallet, useLegacyMainScreen, walletsBootstrapped) {
                     if (!walletsBootstrapped) return@LaunchedEffect
                     if (hasWallet) return@LaunchedEffect
-                    if (createFlow is CreateWalletFlow.Idle) {
+                    if (useLegacyMainScreen) {
+                        if (state.sheetState !is SheetState.AddWallet) {
+                            viewModel.openAddWalletSheet()
+                        }
+                    } else if (createFlow is CreateWalletFlow.Idle) {
                         viewModel.showCreateWalletOnboarding()
                     }
                 }
@@ -153,13 +160,23 @@ private fun AppNavigation(
                     flow = createFlow,
                     viewModel = viewModel,
                     fallback = {
-                        WalletScreen(
-                            state = state,
-                            walletKit = kit,
-                            nftsViewModel = nftsViewModel,
-                            swapViewModel = swapViewModel,
-                            actions = walletActions,
-                        )
+                        if (useLegacyMainScreen) {
+                            LegacyWalletScreen(
+                                state = state,
+                                walletKit = kit,
+                                nftsViewModel = nftsViewModel,
+                                swapViewModel = swapViewModel,
+                                actions = walletActions,
+                            )
+                        } else {
+                            WalletScreen(
+                                state = state,
+                                walletKit = kit,
+                                nftsViewModel = nftsViewModel,
+                                swapViewModel = swapViewModel,
+                                actions = walletActions,
+                            )
+                        }
                     },
                 )
             }

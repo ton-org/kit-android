@@ -83,11 +83,28 @@ class WalletController(composeTestRule: ComposeTestRule? = null) {
     // ===========================================
 
     /**
-     * Whether the wallet home is visible. The home exposes [TestTags.WALLET_BALANCE]; returns true
-     * only when it is visible AND the [AddWalletSheet] is not in front of it.
+     * Check if we're on the legacy wallet home screen (the only screen the e2e suite knows how
+     * to drive). The legacy toolbar exposes [TestTags.BROWSER_NO_INJECT_BUTTON]; the modern
+     * [WalletScreen] does not. Returns true only when the legacy home is visible AND the
+     * [AddWalletSheet] is not in front of it.
      */
-    fun isOnHomeScreen(): Boolean = isOnModernHome() && !isAddWalletSheetShowing()
+    fun isOnHomeScreen(): Boolean {
+        if (!isOnLegacyHome()) return false
+        return !isAddWalletSheetShowing()
+    }
 
+    private fun isOnLegacyHome(): Boolean = try {
+        composeTestRule.onNodeWithTag(TestTags.BROWSER_NO_INJECT_BUTTON).assertExists()
+        true
+    } catch (e: AssertionError) {
+        false
+    }
+
+    /**
+     * The modern [WalletScreen] is the default for new installs. It carries no legacy testTags
+     * but exposes [TestTags.WALLET_BALANCE] on the balance area, which is also the 5-tap secret
+     * gesture target that toggles back to the legacy screen.
+     */
     private fun isOnModernHome(): Boolean = try {
         composeTestRule.onNodeWithTag(TestTags.WALLET_BALANCE).assertExists()
         true
@@ -276,8 +293,8 @@ class WalletController(composeTestRule: ComposeTestRule? = null) {
                 enterMnemonicOnImportScreen(mnemonic)
             }
             isAddWalletSheetShowing() -> {
-                Log.d("WalletController", "AddWalletSheet visible - using paste-all field")
-                importWalletViaAddSheet(mnemonic)
+                Log.d("WalletController", "Legacy AddWalletSheet visible - using paste-all field")
+                importWalletViaLegacySheet(mnemonic)
             }
             else -> {
                 Log.w("WalletController", "importWallet: no recognised import UI - aborting")
@@ -285,14 +302,15 @@ class WalletController(composeTestRule: ComposeTestRule? = null) {
             }
         }
 
-        // Wait for the wallet home to appear after import succeeds.
+        // Wait for wallet home (either modern or legacy) to appear after import succeeds.
         composeTestRule.waitForIdle()
         try {
-            composeTestRule.waitUntil(15_000L) { isOnModernHome() }
+            composeTestRule.waitUntil(15_000L) { isOnLegacyHome() || isOnModernHome() }
             Log.d("WalletController", "Wallet loaded successfully in UI")
         } catch (e: Exception) {
             Log.e("WalletController", "Wallet home still not visible after timeout: ${e.message}")
         }
+        Log.d("WalletController", "After import - legacy: ${isOnLegacyHome()}, modern: ${isOnModernHome()}")
     }
 
     /** Modern import flow: paste the full phrase into the first tagged word field, tap Continue. */
@@ -318,8 +336,8 @@ class WalletController(composeTestRule: ComposeTestRule? = null) {
         composeTestRule.waitForIdle()
     }
 
-    /** AddWalletSheet flow: paste the full phrase into the sheet's paste-all field. */
-    private fun importWalletViaAddSheet(mnemonic: List<String>) {
+    /** Legacy AddWalletSheet flow (only reachable when the dev legacy-screen toggle is on). */
+    private fun importWalletViaLegacySheet(mnemonic: List<String>) {
         val mnemonicString = mnemonic.joinToString(" ")
 
         composeTestRule.waitUntil(5_000L) {
@@ -388,16 +406,35 @@ class WalletController(composeTestRule: ComposeTestRule? = null) {
         Log.d("WalletController", "=== setupWallet called with ${mnemonic.size} word mnemonic ===")
         composeTestRule.waitForIdle()
 
-        // Already on the wallet home — wallet exists from a previous run.
+        // Check if we're already on the legacy home screen (wallet exists from a previous run
+        // and the dev toggle is already flipped).
         if (isOnHomeScreen()) {
-            Log.d("WalletController", "Already on home screen - wallet exists, skipping setup")
+            Log.d("WalletController", "Already on legacy home screen - wallet exists, skipping setup")
             return
         }
 
-        // A pre-wallet surface is showing — import directly.
-        if (isAddWalletSheetShowing() || isOnOnboardingScreen() || isOnImportScreen()) {
-            Log.d("WalletController", "Pre-wallet surface visible - importing wallet")
+        // Check if AddWalletSheet is already showing (password was set previously, dev toggle on)
+        if (isAddWalletSheetShowing()) {
+            Log.d("WalletController", "AddWalletSheet already showing - importing wallet directly")
             importWallet(mnemonic)
+            ensureLegacyScreen()
+            return
+        }
+
+        // Modern first-run lands on the onboarding screen (or the import screen if the user
+        // already tapped through). Both are valid pre-wallet states.
+        if (isOnOnboardingScreen() || isOnImportScreen()) {
+            Log.d("WalletController", "Modern onboarding visible - importing wallet")
+            importWallet(mnemonic)
+            ensureLegacyScreen()
+            return
+        }
+
+        // The post-import / post-unlock app lands on the modern WalletScreen by default.
+        // Tests target legacy UI, so toggle if needed.
+        if (isOnModernHome()) {
+            Log.d("WalletController", "On modern WalletScreen - wallet exists, toggling to legacy")
+            ensureLegacyScreen()
             return
         }
 
@@ -413,24 +450,86 @@ class WalletController(composeTestRule: ComposeTestRule? = null) {
         for (i in 1..10) {
             composeTestRule.waitForIdle()
 
+            // If on legacy home screen, wallet already exists and toggle was on
             if (isOnHomeScreen()) {
-                Log.d("WalletController", "On home after auth (check $i) - wallet exists, skipping import")
+                Log.d("WalletController", "On legacy home after auth (check $i) - wallet exists, skipping import")
                 return
             }
 
-            if (isAddWalletSheetShowing() || isOnOnboardingScreen() || isOnImportScreen()) {
-                Log.d("WalletController", "Import surface after auth (check $i) - importing wallet")
+            // If AddWalletSheet is showing, import wallet
+            if (isAddWalletSheetShowing()) {
+                Log.d("WalletController", "AddWalletSheet showing after auth (check $i) - importing wallet")
                 importWallet(mnemonic)
+                ensureLegacyScreen()
                 return
             }
 
-            Log.d("WalletController", "Waiting for home/import surface (check $i)...")
+            // Modern first-run onboarding (or already on the import screen).
+            if (isOnOnboardingScreen() || isOnImportScreen()) {
+                Log.d("WalletController", "Onboarding visible after auth (check $i) - importing wallet")
+                importWallet(mnemonic)
+                ensureLegacyScreen()
+                return
+            }
+
+            // Default landing for an existing-wallet app: the modern WalletScreen with the balance
+            // tile visible. Switch to legacy so the rest of the suite can drive it.
+            if (isOnModernHome()) {
+                Log.d("WalletController", "Modern home after auth (check $i) - toggling to legacy")
+                ensureLegacyScreen()
+                return
+            }
+
+            Log.d("WalletController", "Waiting for home/addWallet screen (check $i)...")
             Thread.sleep(200) // Small delay between checks
         }
 
         // Fallback: try to import wallet anyway (this may fail)
         Log.w("WalletController", "No expected screen detected after 10 checks, attempting import as fallback")
         importWallet(mnemonic)
+        ensureLegacyScreen()
+    }
+
+    /**
+     * Make sure we end up on the legacy wallet home. The new auth flow drops the user on
+     * [WalletScreen] by default; e2e tests were written against [LegacyWalletScreen], which is
+     * reached by the dev-only 5-tap secret on the balance tile. No-op if already on legacy.
+     */
+    @Step("Switch to legacy wallet screen")
+    fun ensureLegacyScreen() {
+        composeTestRule.waitForIdle()
+        if (isOnLegacyHome()) {
+            Log.d("WalletController", "ensureLegacyScreen: already on legacy home")
+            return
+        }
+
+        // Wait for the modern home (with the WALLET_BALANCE tile) to be ready before tapping.
+        try {
+            composeTestRule.waitUntil(UI_IDLE_TIMEOUT) { isOnModernHome() }
+        } catch (e: Exception) {
+            Log.w("WalletController", "ensureLegacyScreen: timed out waiting for modern home: ${e.message}")
+        }
+
+        if (!isOnModernHome()) {
+            Log.w("WalletController", "ensureLegacyScreen: modern home not visible, skipping toggle")
+            return
+        }
+
+        // DevToggleTaps requires 5 taps inside a 3-second window. performClick runs on the test
+        // thread back-to-back so they always land inside that window.
+        Log.d("WalletController", "ensureLegacyScreen: performing 5 quick taps on WALLET_BALANCE")
+        repeat(5) {
+            composeTestRule.onNodeWithTag(TestTags.WALLET_BALANCE).performClick()
+        }
+        composeTestRule.waitForIdle()
+
+        try {
+            composeTestRule.waitUntil(UI_IDLE_TIMEOUT) { isOnLegacyHome() }
+            Log.d("WalletController", "ensureLegacyScreen: legacy home is now visible")
+        } catch (e: Exception) {
+            Log.w("WalletController", "ensureLegacyScreen: legacy home did not appear: ${e.message}")
+        }
+        composeTestRule.waitForIdle()
     }
 
     // ===========================================
@@ -445,34 +544,43 @@ class WalletController(composeTestRule: ComposeTestRule? = null) {
      */
     @Step("Connect by TonConnect URL")
     fun connectByUrl(url: String) {
-        // Modern path: gear -> Investigation -> TonConnect -> Connect to dApp -> URL dialog.
-        composeTestRule.onNodeWithTag(TestTags.INVESTIGATION_BUTTON).performClick()
+        // Wait for wallet home screen with Handle URL button
         composeTestRule.waitUntil(5000) {
-            composeTestRule.onAllNodesWithTag(TestTags.INVESTIGATION_TONCONNECT_ROW)
+            composeTestRule.onAllNodesWithTag(TestTags.HANDLE_URL_BUTTON)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeTestRule.onNodeWithTag(TestTags.INVESTIGATION_TONCONNECT_ROW).performClick()
 
-        composeTestRule.waitUntil(5000) {
-            composeTestRule.onAllNodesWithTag(TestTags.INVESTIGATION_CONNECT_ROW)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        composeTestRule.onNodeWithTag(TestTags.INVESTIGATION_CONNECT_ROW).performClick()
+        // Click "Handle URL" button to open dialog
+        composeTestRule.onNodeWithTag(TestTags.HANDLE_URL_BUTTON)
+            .performClick()
 
+        composeTestRule.waitForIdle()
+
+        // Wait for the URL input field in the dialog
         composeTestRule.waitUntil(3000) {
             composeTestRule.onAllNodesWithTag(TestTags.TONCONNECT_URL_FIELD)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeTestRule.onNodeWithTag(TestTags.TONCONNECT_URL_FIELD).performTextInput(url)
-        composeTestRule.onNodeWithTag(TestTags.TONCONNECT_PROCESS_BUTTON).performClick()
+
+        // Enter the TonConnect URL
+        composeTestRule.onNodeWithTag(TestTags.TONCONNECT_URL_FIELD)
+            .performTextInput(url)
+
+        // Click the process button
+        composeTestRule.onNodeWithTag(TestTags.TONCONNECT_PROCESS_BUTTON)
+            .performClick()
+
         composeTestRule.waitForIdle()
     }
 
-    /** Wait for the wallet home screen (balance tile) to be visible. */
+    /**
+     * Wait for the (legacy) wallet home screen to be visible. The e2e suite runs against the
+     * legacy screen, so [setupWallet] ensures we are toggled there before this is called.
+     */
     @Step("Wait for wallet home screen")
     fun waitForWalletHome() {
         composeTestRule.waitUntil(SHEET_APPEAR_TIMEOUT) {
-            composeTestRule.onAllNodesWithTag(TestTags.WALLET_BALANCE)
+            composeTestRule.onAllNodesWithTag(TestTags.WALLET_ADDRESS)
                 .fetchSemanticsNodes().isNotEmpty()
         }
     }
