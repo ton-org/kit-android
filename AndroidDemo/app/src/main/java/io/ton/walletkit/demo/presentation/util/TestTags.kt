@@ -60,6 +60,18 @@ object TestTags {
     const val ADD_WALLET_BUTTON = "add-wallet"
     const val REFRESH_BUTTON = "refresh"
     const val BROWSER_NO_INJECT_BUTTON = "browser-no-inject"
+    const val BROWSER_INJECT_BUTTON = "browser-inject"
+    const val BROWSER_URL_FIELD = "browser-url"
+    const val INVESTIGATION_BUTTON = "investigation"
+    const val INVESTIGATION_TONCONNECT_ROW = "investigation-tonconnect"
+    const val INVESTIGATION_BROWSER_ROW = "investigation-browser"
+    const val INVESTIGATION_CONNECT_ROW = "investigation-connect-to-dapp"
+    const val INVESTIGATION_ADD_WALLET_ROW = "investigation-add-wallet"
+    const val ADD_WALLET_NAME_FIELD = "add-wallet-name"
+    const val ADD_WALLET_MNEMONIC_FIELD = "add-wallet-mnemonic"
+    const val ADD_WALLET_SECRET_KEY_FIELD = "add-wallet-secret-key"
+    const val ADD_WALLET_IMPORT_BUTTON = "add-wallet-import"
+    const val ADD_WALLET_GENERATE_BUTTON = "add-wallet-generate"
 
     // ConnectRequestSheet
     const val CONNECT_REQUEST_SHEET = "request"
