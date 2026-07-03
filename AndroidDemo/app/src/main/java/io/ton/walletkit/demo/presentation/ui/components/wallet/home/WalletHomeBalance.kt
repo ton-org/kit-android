@@ -34,7 +34,6 @@ import io.ton.walletkit.demo.designsystem.components.text.TonText
 import io.ton.walletkit.demo.designsystem.icons.TonIcon
 import io.ton.walletkit.demo.designsystem.icons.TonIconImage
 import io.ton.walletkit.demo.designsystem.theme.TonTheme
-import io.ton.walletkit.demo.presentation.dev.devToggleTaps
 import io.ton.walletkit.demo.presentation.util.TestTags
 
 @Composable
@@ -45,7 +44,6 @@ fun WalletHomeBalance(
     truncatedAddress: String,
     onCopyAddress: () -> Unit,
     modifier: Modifier = Modifier,
-    onSecretTap: (() -> Unit)? = null,
 ) {
     val animated = rememberCountUp(totalBalance)
     val formatted = formatCountUp(animated, maxFractionDigits)
@@ -53,14 +51,8 @@ fun WalletHomeBalance(
     val integerPart = if (dotIndex < 0) formatted else formatted.substring(0, dotIndex)
     val fractionPart = if (dotIndex < 0) "" else formatted.substring(dotIndex)
 
-    val gestureModifier = if (onSecretTap != null) {
-        Modifier.devToggleTaps(onTrigger = onSecretTap)
-    } else {
-        Modifier
-    }
     Column(
         modifier = modifier
-            .then(gestureModifier)
             .testTag(TestTags.WALLET_BALANCE),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),

@@ -19,13 +19,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-@file:SuppressLint("SetJavaScriptEnabled")
-
 package io.ton.walletkit.demo.presentation.ui.screen
 
-import android.annotation.SuppressLint
-import android.view.ViewGroup
-import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -35,6 +30,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,21 +41,30 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import io.ton.walletkit.ITONWalletKit
+import io.ton.walletkit.api.ChainIds
+import io.ton.walletkit.api.MAINNET
+import io.ton.walletkit.api.TESTNET
+import io.ton.walletkit.api.TETRA
+import io.ton.walletkit.api.WalletVersions
+import io.ton.walletkit.api.generated.TONNetwork
 import io.ton.walletkit.demo.R
+import io.ton.walletkit.demo.designsystem.components.button.TonButton
+import io.ton.walletkit.demo.designsystem.components.button.TonButtonConfig
+import io.ton.walletkit.demo.designsystem.components.segmentedcontrol.TonSegmentedControl
 import io.ton.walletkit.demo.designsystem.components.text.TonText
 import io.ton.walletkit.demo.designsystem.theme.SmoothCornerShape
 import io.ton.walletkit.demo.designsystem.theme.TonTheme
+import io.ton.walletkit.demo.domain.model.WalletInterfaceType
 import io.ton.walletkit.demo.presentation.ui.dialog.UrlPromptDialog
-import io.ton.walletkit.demo.presentation.ui.screen.iframesec.RealBridgeIframeCase
 import io.ton.walletkit.demo.presentation.ui.screen.iframesec.WalletKitRealBridgeIframeScreen
 import io.ton.walletkit.demo.presentation.util.QrScanner
-import io.ton.walletkit.extensions.injectTonConnect
+import io.ton.walletkit.demo.presentation.util.TestTags
 
-private enum class InvestigationPage { Tonconnect, DappWebView, RealBridge }
+private enum class InvestigationPage { Tonconnect, Browser, AddWallet, RealBridge }
 
 /**
  * Developer "Wallet Kit Investigation" screen: a list of debug tools reached from the wallet-home
@@ -68,6 +75,9 @@ private enum class InvestigationPage { Tonconnect, DappWebView, RealBridge }
 fun WalletKitInvestigationScreen(
     onBack: () -> Unit,
     onConnect: (String) -> Unit,
+    onOpenBrowser: (String, Boolean) -> Unit,
+    onImportWallet: (String, TONNetwork, List<String>, String, String, WalletInterfaceType) -> Unit,
+    onGenerateWallet: (String, TONNetwork, String, WalletInterfaceType) -> Unit,
     walletKit: ITONWalletKit,
     modifier: Modifier = Modifier,
 ) {
@@ -79,9 +89,25 @@ fun WalletKitInvestigationScreen(
             WalletKitTonconnectScreen(onBack = { page = null }, onConnect = onConnect, modifier = modifier)
             return
         }
-        InvestigationPage.DappWebView -> {
+        InvestigationPage.Browser -> {
             BackHandler { page = null }
-            DappWebViewScreen(onBack = { page = null }, walletKit = walletKit, modifier = modifier)
+            BrowserLauncherScreen(onBack = { page = null }, onOpenBrowser = onOpenBrowser, modifier = modifier)
+            return
+        }
+        InvestigationPage.AddWallet -> {
+            BackHandler { page = null }
+            TestAddWalletScreen(
+                onBack = { page = null },
+                onImport = { name, network, mnemonic, secretKey, version, interfaceType ->
+                    onImportWallet(name, network, mnemonic, secretKey, version, interfaceType)
+                    page = null
+                },
+                onGenerate = { name, network, version, interfaceType ->
+                    onGenerateWallet(name, network, version, interfaceType)
+                    page = null
+                },
+                modifier = modifier,
+            )
             return
         }
         InvestigationPage.RealBridge -> {
@@ -107,8 +133,18 @@ fun WalletKitInvestigationScreen(
             InvestigationRow(
                 title = stringResource(R.string.investigation_tonconnect),
                 onClick = { page = InvestigationPage.Tonconnect },
+                modifier = Modifier.testTag(TestTags.INVESTIGATION_TONCONNECT_ROW),
             )
-            InvestigationRow(title = "dApp WebView", onClick = { page = InvestigationPage.DappWebView })
+            InvestigationRow(
+                title = "dApp Browser",
+                onClick = { page = InvestigationPage.Browser },
+                modifier = Modifier.testTag(TestTags.INVESTIGATION_BROWSER_ROW),
+            )
+            InvestigationRow(
+                title = "Add Wallet",
+                onClick = { page = InvestigationPage.AddWallet },
+                modifier = Modifier.testTag(TestTags.INVESTIGATION_ADD_WALLET_ROW),
+            )
             InvestigationRow(
                 title = "Iframe Security — Real dApp Bridge",
                 onClick = { page = InvestigationPage.RealBridge },
@@ -142,6 +178,7 @@ private fun WalletKitTonconnectScreen(
             InvestigationRow(
                 title = stringResource(R.string.investigation_connect_to_dapp),
                 onClick = { showPrompt = true },
+                modifier = Modifier.testTag(TestTags.INVESTIGATION_CONNECT_ROW),
             )
             InvestigationRow(
                 title = stringResource(R.string.investigation_scan_qr),
@@ -169,45 +206,179 @@ private fun WalletKitTonconnectScreen(
     }
 }
 
-/** Minimal dApp WebView with the real WalletKit injection — mirrors the iOS investigation entry. */
+private const val DEFAULT_DAPP_URL = "https://tonconnect-demo-dapp-with-react-ui.vercel.app/"
+
 @Composable
-private fun DappWebViewScreen(
+private fun BrowserLauncherScreen(
     onBack: () -> Unit,
-    walletKit: ITONWalletKit,
+    onOpenBrowser: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var url by remember { mutableStateOf(DEFAULT_DAPP_URL) }
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(TonTheme.colors.bgSecondary),
     ) {
-        SubScreenTopBar(title = "dApp WebView", onBack = onBack)
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    injectTonConnect(walletKit)
-                    loadUrl(RealBridgeIframeCase.DAPP_URL)
-                }
-            },
-        )
+        SubScreenTopBar(title = "dApp Browser", onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TextField(
+                value = url,
+                onValueChange = { url = it },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(TestTags.BROWSER_URL_FIELD),
+            )
+            InvestigationRow(
+                title = "Open (injected)",
+                onClick = { onOpenBrowser(url, true) },
+                modifier = Modifier.testTag(TestTags.BROWSER_INJECT_BUTTON),
+            )
+            InvestigationRow(
+                title = "Open (no-inject)",
+                onClick = { onOpenBrowser(url, false) },
+                modifier = Modifier.testTag(TestTags.BROWSER_NO_INJECT_BUTTON),
+            )
+        }
     }
 }
 
 @Composable
-private fun InvestigationRow(title: String, onClick: () -> Unit) {
+private fun TestAddWalletScreen(
+    onBack: () -> Unit,
+    onImport: (String, TONNetwork, List<String>, String, String, WalletInterfaceType) -> Unit,
+    onGenerate: (String, TONNetwork, String, WalletInterfaceType) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var name by remember { mutableStateOf("Test wallet") }
+    var network by remember { mutableStateOf(TONNetwork.MAINNET) }
+    var version by remember { mutableStateOf(WalletVersions.V5R1) }
+    var interfaceType by remember { mutableStateOf(WalletInterfaceType.MNEMONIC) }
+    var mnemonic by remember { mutableStateOf("") }
+    var secretKey by remember { mutableStateOf("") }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(TonTheme.colors.bgSecondary),
+    ) {
+        SubScreenTopBar(title = "Add Wallet", onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            AddWalletFieldLabel("Name")
+            TextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag(TestTags.ADD_WALLET_NAME_FIELD),
+            )
+
+            AddWalletFieldLabel("Network")
+            TonSegmentedControl(
+                selection = network,
+                items = listOf(TONNetwork.MAINNET, TONNetwork.TESTNET, TONNetwork.TETRA),
+                title = ::networkLabel,
+                onSelect = { network = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            AddWalletFieldLabel("Version")
+            TonSegmentedControl(
+                selection = version,
+                items = listOf(WalletVersions.V5R1, WalletVersions.V4R2),
+                title = { it },
+                onSelect = { version = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            AddWalletFieldLabel("Interface")
+            TonSegmentedControl(
+                selection = interfaceType,
+                items = WalletInterfaceType.entries,
+                title = ::interfaceLabel,
+                onSelect = { interfaceType = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (interfaceType == WalletInterfaceType.SECRET_KEY) {
+                AddWalletFieldLabel("Secret key (hex)")
+                TextField(
+                    value = secretKey,
+                    onValueChange = { secretKey = it.trim() },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TestTags.ADD_WALLET_SECRET_KEY_FIELD),
+                )
+            } else {
+                AddWalletFieldLabel("Recovery phrase")
+                TextField(
+                    value = mnemonic,
+                    onValueChange = { mnemonic = it },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth().testTag(TestTags.ADD_WALLET_MNEMONIC_FIELD),
+                )
+            }
+
+            TonButton(
+                text = "Import",
+                onClick = {
+                    val words = mnemonic.trim().lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+                    onImport(name, network, words, secretKey, version, interfaceType)
+                },
+                config = TonButtonConfig.Primary,
+                modifier = Modifier.fillMaxWidth().testTag(TestTags.ADD_WALLET_IMPORT_BUTTON),
+            )
+            TonButton(
+                text = "Generate",
+                onClick = { onGenerate(name, network, version, interfaceType) },
+                config = TonButtonConfig.Secondary,
+                enabled = interfaceType != WalletInterfaceType.SECRET_KEY,
+                modifier = Modifier.fillMaxWidth().testTag(TestTags.ADD_WALLET_GENERATE_BUTTON),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddWalletFieldLabel(text: String) {
+    TonText(
+        text = text,
+        style = TonTheme.typography.subheadline2,
+        color = TonTheme.colors.textSecondary,
+    )
+}
+
+private fun networkLabel(network: TONNetwork): String = when (network.chainId) {
+    ChainIds.MAINNET -> "Mainnet"
+    ChainIds.TESTNET -> "Testnet"
+    ChainIds.TETRA -> "Tetra"
+    else -> "Unknown"
+}
+
+private fun interfaceLabel(type: WalletInterfaceType): String = when (type) {
+    WalletInterfaceType.MNEMONIC -> "Mnemonic"
+    WalletInterfaceType.SECRET_KEY -> "Secret Key"
+    WalletInterfaceType.SIGNER -> "Signer"
+}
+
+@Composable
+private fun InvestigationRow(title: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val shape = SmoothCornerShape(12.dp)
     TonText(
         text = title,
         style = TonTheme.typography.body,
         color = TonTheme.colors.textPrimary,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(TonTheme.colors.bgPrimary)

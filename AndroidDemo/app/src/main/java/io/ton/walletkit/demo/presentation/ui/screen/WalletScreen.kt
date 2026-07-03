@@ -88,7 +88,6 @@ import io.ton.walletkit.demo.designsystem.icons.TonIconImage
 import io.ton.walletkit.demo.designsystem.theme.TonTheme
 import io.ton.walletkit.demo.domain.model.WalletInterfaceType
 import io.ton.walletkit.demo.presentation.actions.WalletActions
-import io.ton.walletkit.demo.presentation.dev.DevPreferences
 import io.ton.walletkit.demo.presentation.model.ConnectRequestUi
 import io.ton.walletkit.demo.presentation.model.JettonDetails
 import io.ton.walletkit.demo.presentation.model.JettonSummary
@@ -98,7 +97,6 @@ import io.ton.walletkit.demo.presentation.model.TransactionRequestUi
 import io.ton.walletkit.demo.presentation.model.WalletSummary
 import io.ton.walletkit.demo.presentation.state.SheetState
 import io.ton.walletkit.demo.presentation.state.WalletUiState
-import io.ton.walletkit.demo.presentation.ui.components.QuickActionsCard
 import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeAssetIcon
 import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeAssetItem
 import io.ton.walletkit.demo.presentation.ui.components.wallet.home.WalletHomeContent
@@ -121,12 +119,9 @@ import io.ton.walletkit.demo.presentation.ui.sheet.WalletDetailsSheet
 import io.ton.walletkit.demo.presentation.ui.sheet.WalletsBottomSheet
 import io.ton.walletkit.demo.presentation.util.JettonFormatters
 import io.ton.walletkit.demo.presentation.util.QrScanner
+import io.ton.walletkit.demo.presentation.util.TestTags
 import io.ton.walletkit.demo.presentation.viewmodel.NFTsListViewModel
 import io.ton.walletkit.demo.presentation.viewmodel.SwapViewModel
-
-// URL for the TonConnect E2E test runner dApp
-// This is the same dApp used by web demo-wallet E2E tests
-private const val DEFAULT_DAPP_URL = "https://allure-test-runner.vercel.app/e2e"
 
 private const val MAX_ASSETS = 3
 private const val MAX_NFTS = 5
@@ -451,7 +446,22 @@ fun WalletScreen(
             HomeSubScreen.Investigation -> {
                 WalletKitInvestigationScreen(
                     onBack = { subScreen = HomeSubScreen.None },
-                    onConnect = actions::onHandleUrl,
+                    onConnect = { url ->
+                        subScreen = HomeSubScreen.None
+                        actions.onHandleUrl(url)
+                    },
+                    onOpenBrowser = { url, inject ->
+                        subScreen = HomeSubScreen.None
+                        actions.onOpenBrowser(url, inject)
+                    },
+                    onImportWallet = { name, network, mnemonic, secretKey, version, interfaceType ->
+                        subScreen = HomeSubScreen.None
+                        actions.onImportWallet(name, network, mnemonic, secretKey, version, interfaceType)
+                    },
+                    onGenerateWallet = { name, network, version, interfaceType ->
+                        subScreen = HomeSubScreen.None
+                        actions.onGenerateWallet(name, network, version, interfaceType)
+                    },
                     walletKit = walletKit,
                 )
             }
@@ -515,7 +525,10 @@ fun WalletScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { subScreen = HomeSubScreen.Investigation }) {
+                    IconButton(
+                        onClick = { subScreen = HomeSubScreen.Investigation },
+                        modifier = Modifier.testTag(TestTags.INVESTIGATION_BUTTON),
+                    ) {
                         TonIconImage(
                             icon = TonIcon.SettingsControl,
                             size = 24.dp,
@@ -535,7 +548,11 @@ fun WalletScreen(
             // Always reserve space for progress indicator to prevent content shift.
             Box(modifier = Modifier.fillMaxWidth().height(4.dp)) {
                 if (state.isLoadingWallets || state.isLoadingSessions) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = TonTheme.colors.bgBrand,
+                        trackColor = TonTheme.colors.bgBrandSubtle,
+                    )
                 }
             }
 
@@ -557,14 +574,6 @@ fun WalletScreen(
                 onShowAllNFTs = { subScreen = HomeSubScreen.AllNFTs },
                 onNFTTap = { preview ->
                     nftsList.firstOrNull { it.address.value == preview.address }?.let { selectedNFT = it }
-                },
-                onBalanceSecretTap = {
-                    val nowLegacy = DevPreferences.toggleLegacyMainScreen(context)
-                    Toast.makeText(
-                        context,
-                        if (nowLegacy) "Legacy main screen ON" else "Legacy main screen OFF",
-                        Toast.LENGTH_SHORT,
-                    ).show()
                 },
             )
         }

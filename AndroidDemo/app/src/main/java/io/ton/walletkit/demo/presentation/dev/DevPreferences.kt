@@ -22,52 +22,17 @@
 package io.ton.walletkit.demo.presentation.dev
 
 import android.content.Context
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 object DevPreferences {
     private const val PREFS_NAME = "dev_preferences"
-    private const val KEY_USE_LEGACY_MAIN_SCREEN = "use_legacy_main_screen"
 
-    private val _useLegacyMainScreen = MutableStateFlow(false)
-    val useLegacyMainScreen: StateFlow<Boolean> = _useLegacyMainScreen.asStateFlow()
+    fun ensureLoaded(context: Context) = Unit
 
-    @Volatile
-    private var loaded = false
-
-    fun ensureLoaded(context: Context) {
-        if (loaded) return
-        synchronized(this) {
-            if (loaded) return
-            val prefs = context.applicationContext
-                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            _useLegacyMainScreen.value = prefs.getBoolean(KEY_USE_LEGACY_MAIN_SCREEN, false)
-            loaded = true
-        }
-    }
-
-    fun toggleLegacyMainScreen(context: Context): Boolean {
-        ensureLoaded(context)
-        val next = !_useLegacyMainScreen.value
+    fun reset(context: Context) {
         context.applicationContext
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putBoolean(KEY_USE_LEGACY_MAIN_SCREEN, next)
-            .apply()
-        _useLegacyMainScreen.value = next
-        return next
-    }
-
-    fun reset(context: Context) {
-        synchronized(this) {
-            context.applicationContext
-                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .clear()
-                .commit()
-            _useLegacyMainScreen.value = false
-            loaded = false
-        }
+            .clear()
+            .commit()
     }
 }
