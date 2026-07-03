@@ -45,7 +45,6 @@ import io.ton.walletkit.demo.data.storage.DemoAppStorage
 import io.ton.walletkit.demo.data.storage.WalletRecord
 import io.ton.walletkit.demo.domain.model.WalletInterfaceType
 import io.ton.walletkit.demo.domain.model.WalletMetadata
-import io.ton.walletkit.demo.presentation.dev.DevPreferences
 import io.ton.walletkit.demo.presentation.model.ConnectPermissionUi
 import io.ton.walletkit.demo.presentation.model.ConnectRequestUi
 import io.ton.walletkit.demo.presentation.model.JettonDetails
@@ -1790,14 +1789,6 @@ class WalletKitViewModel @Inject constructor(
                 // Wait until the initial wallet load cycle in bootstrap() has fully completed
                 // before deciding whether to open the "add wallet" sheet.
                 _state.first { it.walletsBootstrapped }
-
-                // Modern flow uses CreateWalletOnboardingScreen, orchestrated by MainActivity
-                // when there's no wallet — auto-opening AddWalletSheet here would race and
-                // leave a stale sheet behind for the user to bump into later. Only fire for
-                // the legacy main screen, which still relies on the bottom-sheet flow.
-                if (_state.value.wallets.isEmpty() && DevPreferences.useLegacyMainScreen.value) {
-                    uiCoordinator.openAddWalletSheet()
-                }
             } catch (e: Exception) {
                 Log.e(LOG_TAG, "Failed to setup password", e)
                 val reason = e.message ?: uiString(R.string.wallet_error_unknown)
@@ -1831,11 +1822,6 @@ class WalletKitViewModel @Inject constructor(
             // Wait until the initial wallet load cycle in bootstrap() has fully completed
             // before deciding whether to open the "add wallet" sheet.
             _state.first { it.walletsBootstrapped }
-            // See [setupPassword] — modern main screen drives onboarding from MainActivity,
-            // so skip the legacy AddWalletSheet auto-open unless we're explicitly on legacy.
-            if (_state.value.wallets.isEmpty() && DevPreferences.useLegacyMainScreen.value) {
-                uiCoordinator.openAddWalletSheet()
-            }
         }
     }
 
