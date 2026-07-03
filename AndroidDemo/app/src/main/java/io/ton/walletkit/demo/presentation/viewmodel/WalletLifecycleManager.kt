@@ -67,19 +67,18 @@ class WalletLifecycleManager(
 
     suspend fun bootstrap(): Result<BootstrapResult> = runCatching {
         val userPrefs = storage.loadUserPreferences()
-        lastPersistedActiveWallet = userPrefs?.activeWalletAddress
+        lastPersistedActiveWallet = userPrefs?.activeWalletId
 
         val kit = kitProvider()
         val wallets = kit.getWallets()
         tonWallets.clear()
         wallets.forEach { wallet ->
-            wallet.address().value?.let { tonWallets[it] = wallet }
+            tonWallets[wallet.identifier()] = wallet
         }
 
         val metadataCorrections = mutableListOf<String>()
         for (wallet in wallets) {
             val address = wallet.address().value ?: continue
-            tonWallets[address] = wallet
             if (walletMetadata[address] == null) {
                 val storedRecord = storage.loadWallet(address)
                 if (storedRecord != null) {
@@ -113,14 +112,14 @@ class WalletLifecycleManager(
         val freshWallets = kit.getWallets()
         // If the bridge returns empty but we have cached wallets, the bridge is likely
         // reinitializing (e.g. after the in-app WebView browser was closed on a slow CI
-        // emulator). Preserve the cache so activeWalletAddress is not incorrectly nulled out.
+        // emulator). Preserve the cache so the active wallet is not incorrectly nulled out.
         val wallets = if (freshWallets.isEmpty() && tonWallets.isNotEmpty()) {
             Log.w(LOG_TAG, "loadWalletSummaries: kit returned empty but cache has ${tonWallets.size} wallets – reusing cache")
             tonWallets.values.toList()
         } else {
             tonWallets.clear()
             freshWallets.forEach { wallet ->
-                wallet.address().value?.let { tonWallets[it] = wallet }
+                tonWallets[wallet.identifier()] = wallet
             }
             freshWallets
         }
@@ -130,6 +129,7 @@ class WalletLifecycleManager(
 
         val result = mutableListOf<WalletSummary>()
         for (wallet in wallets) {
+            val walletId = wallet.identifier()
             val address = wallet.address().value
             val metadata = ensureMetadataForAddress(address)
 
@@ -148,6 +148,7 @@ class WalletLifecycleManager(
 
             result.add(
                 WalletSummary(
+                    walletId = walletId,
                     address = address,
                     name = metadata.name,
                     network = metadata.network,
@@ -166,11 +167,21 @@ class WalletLifecycleManager(
         return result
     }
 
-    suspend fun persistActiveWalletPreference(address: String?) {
-        if (lastPersistedActiveWallet == address) return
-        val updatedPrefs = UserPreferences(activeWalletAddress = address)
+    data class BalanceUpdate(val nano: String, val formatted: String)
+
+    suspend fun refreshBalance(walletId: String): BalanceUpdate? {
+        val wallet = tonWallets[walletId] ?: return null
+        val balance = runCatching { wallet.balance() }
+            .onFailure { Log.e(LOG_TAG, "refreshBalance: balance failed for $walletId", it) }
+            .getOrNull() ?: return null
+        return BalanceUpdate(balance.value, TonFormatter.formatTon(balance.value))
+    }
+
+    suspend fun persistActiveWalletPreference(walletId: String?) {
+        if (lastPersistedActiveWallet == walletId) return
+        val updatedPrefs = UserPreferences(activeWalletId = walletId)
         storage.saveUserPreferences(updatedPrefs)
-        lastPersistedActiveWallet = address
+        lastPersistedActiveWallet = walletId
     }
 
     suspend fun switchNetworkIfNeeded(target: TONNetwork, onRefresh: suspend () -> Unit) {

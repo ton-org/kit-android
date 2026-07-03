@@ -111,7 +111,7 @@ class WalletKitViewModel @Inject constructor(
     private var streamingTransactionsJob: Job? = null
     private var streamingConnectionJob: Job? = null
     private var streamingJettonsJob: Job? = null
-    private var currentStreamingWalletAddress: String? = null
+    private var currentStreamingWalletId: String? = null
     private var currentStreamingNetwork: TONNetwork? = null
     private var walletKit: ITONWalletKit? = null
 
@@ -148,7 +148,7 @@ class WalletKitViewModel @Inject constructor(
 
     private val tonConnectViewModel = TonConnectViewModel(
         walletKit = { walletKit ?: error("ITONWalletKit not initialized") },
-        getWalletByAddress = { address -> lifecycleManager.tonWallets[address] },
+        getWalletById = { walletId -> lifecycleManager.tonWallets[walletId] },
         onRequestApproved = { onTonConnectRequestApproved() },
         onRequestRejected = { onTonConnectRequestRejected() },
         onRequestFailed = { message -> onTonConnectRequestFailed(message) },
@@ -157,8 +157,8 @@ class WalletKitViewModel @Inject constructor(
     )
 
     private val walletOperationsViewModel = WalletOperationsViewModel(
-        getWalletByAddress = { address -> lifecycleManager.tonWallets[address] },
-        onWalletSwitched = { address -> handleWalletSwitched(address) },
+        getWalletById = { walletId -> lifecycleManager.tonWallets[walletId] },
+        onWalletSwitched = { walletId -> handleWalletSwitched(walletId) },
     )
 
     // NFTs ViewModel for active wallet
@@ -174,9 +174,9 @@ class WalletKitViewModel @Inject constructor(
 
     private var jettonsCollectors: List<Job> = emptyList()
     private var transactionsCollectors: List<Job> = emptyList()
-    private var currentTransactionsWalletAddress: String? = null
-    private var currentJettonsWalletAddress: String? = null
-    private var currentNftsWalletAddress: String? = null
+    private var currentTransactionsWalletId: String? = null
+    private var currentJettonsWalletId: String? = null
+    private var currentNftsWalletId: String? = null
 
     private sealed interface TonConnectAction {
         data class Connect(val request: ConnectRequestUi, val wallet: WalletSummary?) : TonConnectAction
@@ -197,6 +197,27 @@ class WalletKitViewModel @Inject constructor(
         val kit = TONWalletKitHelper.mainnet(application)
         walletKit = kit
         return kit
+    }
+
+    private suspend fun refreshWalletBalance(walletId: String) {
+        val balance = lifecycleManager.refreshBalance(walletId) ?: return
+        _state.update { st ->
+            st.copy(
+                wallets = st.wallets.map {
+                    if (it.walletId == walletId) {
+                        it.copy(balanceNano = balance.nano, balance = balance.formatted, lastUpdated = System.currentTimeMillis())
+                    } else {
+                        it
+                    }
+                },
+            )
+        }
+    }
+
+    private fun addressForWalletId(walletId: String?): String? {
+        if (walletId == null) return null
+        return state.value.wallets.firstOrNull { it.walletId == walletId }?.address
+            ?: lifecycleManager.tonWallets[walletId]?.address()?.value
     }
 
     init {
@@ -264,7 +285,7 @@ class WalletKitViewModel @Inject constructor(
         if (!savedActiveWallet.isNullOrBlank() && tonWallets.containsKey(savedActiveWallet)) {
             Log.d(LOG_TAG, "Restored active wallet selection: $savedActiveWallet")
             applyWalletSwitch(
-                address = savedActiveWallet,
+                walletId = savedActiveWallet,
                 persistPreference = false,
                 logSwitch = false,
                 refreshOnSwitch = false,
@@ -273,21 +294,21 @@ class WalletKitViewModel @Inject constructor(
             if (!savedActiveWallet.isNullOrBlank()) {
                 Log.w(LOG_TAG, "Saved active wallet '$savedActiveWallet' not found in loaded wallets, using first wallet instead")
             }
-            state.value.activeWalletAddress?.let { address ->
-                if (tonWallets.containsKey(address)) {
+            state.value.activeWalletId?.let { walletId ->
+                if (tonWallets.containsKey(walletId)) {
                     applyWalletSwitch(
-                        address = address,
+                        walletId = walletId,
                         persistPreference = false,
                         logSwitch = false,
                         refreshOnSwitch = false,
                     )
                 } else {
-                    Log.w(LOG_TAG, "Active wallet address '$address' not found in loaded wallets")
+                    Log.w(LOG_TAG, "Active wallet id '$walletId' not found in loaded wallets")
                 }
             }
         }
 
-        syncStreamingObservers(_state.value.activeWalletAddress)
+        syncStreamingObservers(_state.value.activeWalletId)
         startBalancePolling()
     }
 
@@ -384,14 +405,14 @@ class WalletKitViewModel @Inject constructor(
     }
 
     private fun handleWalletSwitched(
-        address: String,
+        walletId: String,
         persistPreference: Boolean = true,
         logSwitch: Boolean = true,
         refreshOnSwitch: Boolean = true,
     ) {
         viewModelScope.launch {
             applyWalletSwitch(
-                address = address,
+                walletId = walletId,
                 persistPreference = persistPreference,
                 logSwitch = logSwitch,
                 refreshOnSwitch = refreshOnSwitch,
@@ -400,34 +421,35 @@ class WalletKitViewModel @Inject constructor(
     }
 
     private suspend fun applyWalletSwitch(
-        address: String,
+        walletId: String,
         persistPreference: Boolean,
         logSwitch: Boolean,
         refreshOnSwitch: Boolean,
     ) {
-        val wallet = lifecycleManager.tonWallets[address]
+        val wallet = lifecycleManager.tonWallets[walletId]
         if (wallet == null) {
             _state.update { it.copy(error = uiString(R.string.wallet_error_wallet_not_found)) }
             return
         }
 
-        uiCoordinator.setActiveWallet(address)
-        syncStreamingObservers(address)
+        uiCoordinator.setActiveWallet(walletId)
+        syncStreamingObservers(walletId)
 
         if (persistPreference) {
-            lifecycleManager.persistActiveWalletPreference(address)
+            lifecycleManager.persistActiveWalletPreference(walletId)
         }
 
-        updateNftsViewModel(address)
-        attachTransactionHistoryViewModel(address)
-        attachJettonsViewModel(address)
+        updateNftsViewModel(walletId)
+        attachTransactionHistoryViewModel(walletId)
+        attachJettonsViewModel(walletId)
 
         if (refreshOnSwitch) {
-            refreshWallets()
+            refreshWalletBalance(walletId)
         }
 
         if (logSwitch) {
-            val walletName = lifecycleManager.walletMetadata[address]?.name ?: wallet.address().value ?: address
+            val address = wallet.address().value
+            val walletName = address?.let { lifecycleManager.walletMetadata[it]?.name } ?: address ?: walletId
             eventLogger.log(R.string.wallet_event_switched_wallet, walletName)
         }
     }
@@ -457,7 +479,7 @@ class WalletKitViewModel @Inject constructor(
                 eventLogger.showTemporaryStatus(uiString(R.string.wallet_status_signed_success))
                 if (action.viaSigner) {
                     viewModelScope.launch {
-                        if (state.value.activeWalletAddress == action.request.walletAddress) {
+                        if (addressForWalletId(state.value.activeWalletId) == action.request.walletAddress) {
                             activeTransactionHistoryViewModel.value?.refresh()
                         }
                     }
@@ -532,44 +554,44 @@ class WalletKitViewModel @Inject constructor(
         }
         Log.d(
             LOG_TAG,
-            "refreshWallets: start active=${state.value.activeWalletAddress} cached=${lifecycleManager.tonWallets.keys}",
+            "refreshWallets: start active=${state.value.activeWalletId} cached=${lifecycleManager.tonWallets.keys}",
         )
         val summaries = runCatching { lifecycleManager.loadWalletSummaries(state.value.sessions) }
         summaries.onSuccess { wallets ->
             val now = System.currentTimeMillis()
-            Log.d(LOG_TAG, "refreshWallets: loaded ${wallets.size} summaries -> ${wallets.map { it.address }}")
+            Log.d(LOG_TAG, "refreshWallets: loaded ${wallets.size} summaries -> ${wallets.map { it.walletId }}")
 
             // Set active wallet based on saved preference or default to first
-            val activeAddress = state.value.activeWalletAddress
-            val newActiveAddress = when {
+            val activeId = state.value.activeWalletId
+            val newActiveId = when {
                 wallets.isEmpty() -> null
                 // Keep current active wallet if it still exists
-                activeAddress != null && wallets.any { it.address == activeAddress } -> activeAddress
+                activeId != null && wallets.any { it.walletId == activeId } -> activeId
                 // Otherwise use first wallet
-                else -> wallets.firstOrNull()?.address
+                else -> wallets.firstOrNull()?.walletId
             }
 
             _state.update {
                 it.copy(
                     wallets = wallets,
-                    activeWalletAddress = newActiveAddress,
+                    activeWalletId = newActiveId,
                     lastUpdated = now,
                     error = null,
                 )
             }
 
-            if (activeAddress != newActiveAddress || lifecycleManager.lastPersistedActiveWallet != newActiveAddress) {
-                lifecycleManager.persistActiveWalletPreference(newActiveAddress)
+            if (activeId != newActiveId || lifecycleManager.lastPersistedActiveWallet != newActiveId) {
+                lifecycleManager.persistActiveWalletPreference(newActiveId)
             }
 
-            if (currentTransactionsWalletAddress != newActiveAddress) {
-                attachTransactionHistoryViewModel(newActiveAddress)
+            if (currentTransactionsWalletId != newActiveId) {
+                attachTransactionHistoryViewModel(newActiveId)
             }
-            if (currentJettonsWalletAddress != newActiveAddress) {
-                attachJettonsViewModel(newActiveAddress)
+            if (currentJettonsWalletId != newActiveId) {
+                attachJettonsViewModel(newActiveId)
             }
-            updateNftsViewModel(newActiveAddress)
-            syncStreamingObservers(newActiveAddress)
+            updateNftsViewModel(newActiveId)
+            syncStreamingObservers(newActiveId)
         }.onFailure { error ->
             Log.e(LOG_TAG, "refreshWallets: loadWalletSummaries failed", error)
             val fallback = uiString(R.string.wallet_error_load_default)
@@ -580,7 +602,7 @@ class WalletKitViewModel @Inject constructor(
         }
         Log.d(
             LOG_TAG,
-            "refreshWallets: done active=${_state.value.activeWalletAddress} wallets=${_state.value.wallets.map { it.address }}",
+            "refreshWallets: done active=${_state.value.activeWalletId} wallets=${_state.value.wallets.map { it.walletId }}",
         )
     }
 
@@ -592,8 +614,8 @@ class WalletKitViewModel @Inject constructor(
         uiCoordinator.openAddWalletSheet()
     }
 
-    fun showWalletDetails(address: String) {
-        val target = state.value.wallets.firstOrNull { it.address == address }
+    fun showWalletDetails(walletId: String) {
+        val target = state.value.wallets.firstOrNull { it.walletId == walletId }
         if (target != null) {
             uiCoordinator.showWalletDetails(target)
         }
@@ -713,12 +735,14 @@ class WalletKitViewModel @Inject constructor(
             if (result.isSuccess) {
                 val newWallet = result.getOrNull()
 
-                var newAddress: String? = null
-                newWallet?.address()?.let { address ->
-                    newAddress = address.value
-                    lifecycleManager.tonWallets[address.value] = newWallet
+                var newWalletId: String? = null
+                if (newWallet != null) {
+                    val walletId = newWallet.identifier()
+                    newWalletId = walletId
+                    lifecycleManager.tonWallets[walletId] = newWallet
 
-                    lifecycleManager.walletMetadata[address.value] = pendingMetadata
+                    val address = newWallet.address().value
+                    lifecycleManager.walletMetadata[address] = pendingMetadata
                     val record = WalletRecord(
                         mnemonic = cleaned,
                         name = pendingMetadata.name,
@@ -726,17 +750,17 @@ class WalletKitViewModel @Inject constructor(
                         version = version,
                         interfaceType = interfaceType.value,
                     )
-                    runCatching { storage.saveWallet(address.value, record) }
-                        .onSuccess { Log.d(LOG_TAG, "importWallet: saved wallet record for ${address.value}") }
-                        .onFailure { Log.e(LOG_TAG, "importWallet: failed to save wallet record for ${address.value}", it) }
+                    runCatching { storage.saveWallet(address, record) }
+                        .onSuccess { Log.d(LOG_TAG, "importWallet: saved wallet record for $address") }
+                        .onFailure { Log.e(LOG_TAG, "importWallet: failed to save wallet record for $address", it) }
                 }
 
-                newAddress?.let { address ->
-                    _state.update { it.copy(activeWalletAddress = address) }
-                    lifecycleManager.persistActiveWalletPreference(address)
-                    updateNftsViewModel(address)
+                newWalletId?.let { walletId ->
+                    _state.update { it.copy(activeWalletId = walletId) }
+                    lifecycleManager.persistActiveWalletPreference(walletId)
+                    updateNftsViewModel(walletId)
                     loadJettons()
-                    Log.d(LOG_TAG, "Auto-switched to newly imported wallet: $address")
+                    Log.d(LOG_TAG, "Auto-switched to newly imported wallet: $walletId")
                 }
                 refreshWallets()
                 dismissSheet()
@@ -798,8 +822,9 @@ class WalletKitViewModel @Inject constructor(
 
             if (result.isSuccess) {
                 val (newWallet, generatedMnemonic) = result.getOrThrow()
+                val newWalletId = newWallet.identifier()
                 val newAddress = newWallet.address().value
-                lifecycleManager.tonWallets[newAddress] = newWallet
+                lifecycleManager.tonWallets[newWalletId] = newWallet
                 lifecycleManager.walletMetadata[newAddress] = pendingMetadata
 
                 // Always save the generated mnemonic so the wallet can be restored on restart.
@@ -816,11 +841,11 @@ class WalletKitViewModel @Inject constructor(
                 runCatching { storage.saveWallet(newAddress, record) }
                     .onSuccess { Log.d(LOG_TAG, "generateWallet: saved wallet record for $newAddress") }
                     .onFailure { Log.e(LOG_TAG, "generateWallet: failed to save wallet record for $newAddress", it) }
-                _state.update { it.copy(activeWalletAddress = newAddress) }
-                lifecycleManager.persistActiveWalletPreference(newAddress)
-                updateNftsViewModel(newAddress)
+                _state.update { it.copy(activeWalletId = newWalletId) }
+                lifecycleManager.persistActiveWalletPreference(newWalletId)
+                updateNftsViewModel(newWalletId)
                 loadJettons()
-                Log.d(LOG_TAG, "Auto-switched to newly generated wallet: $newAddress")
+                Log.d(LOG_TAG, "Auto-switched to newly generated wallet: $newWalletId")
                 refreshWallets()
                 dismissSheet()
 
@@ -838,17 +863,17 @@ class WalletKitViewModel @Inject constructor(
     }
 
     fun handleTonConnectUrl(url: String) {
-        val activeAddress = state.value.activeWalletAddress
-        if (activeAddress == null) {
+        val activeWalletId = state.value.activeWalletId
+        if (activeWalletId == null) {
             _state.update { it.copy(error = uiString(R.string.wallet_error_no_wallet_selected)) }
             return
         }
-        tonConnectViewModel.handleTonConnectUrl(url.trim(), activeAddress)
+        tonConnectViewModel.handleTonConnectUrl(url.trim(), activeWalletId)
     }
 
     fun approveConnect(request: ConnectRequestUi, wallet: WalletSummary) {
         pendingTonConnectAction = TonConnectAction.Connect(request, wallet)
-        tonConnectViewModel.approveConnect(request, wallet.address)
+        tonConnectViewModel.approveConnect(request, wallet.walletId)
     }
 
     fun rejectConnect(request: ConnectRequestUi, reason: String = DEFAULT_REJECTION_REASON) {
@@ -920,24 +945,24 @@ class WalletKitViewModel @Inject constructor(
         sessionsViewModel.disconnectSession(sessionId)
     }
 
-    fun openSendTransactionSheet(walletAddress: String) {
-        val wallet = state.value.wallets.firstOrNull { it.address == walletAddress }
+    fun openSendTransactionSheet(walletId: String) {
+        val wallet = state.value.wallets.firstOrNull { it.walletId == walletId }
         if (wallet != null) {
             uiCoordinator.openSendTransactionSheet(wallet)
         }
     }
 
     fun openSwapSheet() {
-        val activeAddress = state.value.activeWalletAddress ?: state.value.wallets.firstOrNull()?.address ?: return
-        val walletSummary = state.value.wallets.firstOrNull { it.address == activeAddress } ?: return
-        val tonWallet = lifecycleManager.tonWallets[activeAddress] ?: return
+        val activeId = state.value.activeWalletId ?: state.value.wallets.firstOrNull()?.walletId ?: return
+        val walletSummary = state.value.wallets.firstOrNull { it.walletId == activeId } ?: return
+        val tonWallet = lifecycleManager.tonWallets[activeId] ?: return
         val kit = walletKit ?: return
         _swapViewModel.value = SwapViewModel(wallet = tonWallet, kit = kit)
         uiCoordinator.openSwapSheet(walletSummary)
     }
 
-    fun openStakingSheet(walletAddress: String) {
-        val wallet = state.value.wallets.firstOrNull { it.address == walletAddress }
+    fun openStakingSheet(walletId: String) {
+        val wallet = state.value.wallets.firstOrNull { it.walletId == walletId }
         if (wallet != null) {
             uiCoordinator.openStakingSheet(wallet)
         }
@@ -947,43 +972,43 @@ class WalletKitViewModel @Inject constructor(
         uiCoordinator.toggleWalletSwitcher()
     }
 
-    fun switchWallet(address: String) {
-        walletOperationsViewModel.switchWallet(address)
+    fun switchWallet(walletId: String) {
+        walletOperationsViewModel.switchWallet(walletId)
     }
 
     /**
      * Update the NFTs ViewModel for the given wallet address.
      */
-    private fun updateNftsViewModel(address: String?) {
-        if (address == null) {
+    private fun updateNftsViewModel(walletId: String?) {
+        if (walletId == null) {
             _nftsViewModel.value = null
-            currentNftsWalletAddress = null
+            currentNftsWalletId = null
             return
         }
 
-        if (currentNftsWalletAddress == address && _nftsViewModel.value != null) {
+        if (currentNftsWalletId == walletId && _nftsViewModel.value != null) {
             return
         }
 
-        val wallet = lifecycleManager.tonWallets[address]
+        val wallet = lifecycleManager.tonWallets[walletId]
         if (wallet == null) {
-            Log.w(LOG_TAG, "updateNftsViewModel: wallet not found for address $address")
+            Log.w(LOG_TAG, "updateNftsViewModel: wallet not found for id $walletId")
             _nftsViewModel.value = null
-            currentNftsWalletAddress = null
+            currentNftsWalletId = null
             return
         }
 
         _nftsViewModel.value = NFTsListViewModel(wallet)
-        currentNftsWalletAddress = address
-        Log.d(LOG_TAG, "updateNftsViewModel: created NFTsListViewModel for $address")
+        currentNftsWalletId = walletId
+        Log.d(LOG_TAG, "updateNftsViewModel: created NFTsListViewModel for $walletId")
     }
 
-    private fun attachTransactionHistoryViewModel(address: String?) {
+    private fun attachTransactionHistoryViewModel(walletId: String?) {
         transactionsCollectors.forEach { it.cancel() }
         transactionsCollectors = emptyList()
-        if (address == null) {
+        if (walletId == null) {
             activeTransactionHistoryViewModel.value = null
-            currentTransactionsWalletAddress = null
+            currentTransactionsWalletId = null
             _state.update { current ->
                 current.copy(
                     isLoadingTransactions = false,
@@ -993,24 +1018,24 @@ class WalletKitViewModel @Inject constructor(
             return
         }
 
-        val wallet = lifecycleManager.tonWallets[address]
+        val wallet = lifecycleManager.tonWallets[walletId]
         if (wallet == null) {
-            Log.w(LOG_TAG, "attachTransactionHistoryViewModel: wallet not found for $address")
+            Log.w(LOG_TAG, "attachTransactionHistoryViewModel: wallet not found for $walletId")
             activeTransactionHistoryViewModel.value = null
-            currentTransactionsWalletAddress = null
+            currentTransactionsWalletId = null
             _state.update { it.copy(isLoadingTransactions = false) }
             return
         }
 
         val viewModel = TransactionHistoryViewModel(wallet, lifecycleManager.transactionCache)
         activeTransactionHistoryViewModel.value = viewModel
-        currentTransactionsWalletAddress = address
+        currentTransactionsWalletId = walletId
 
         val transactionsJob = viewModelScope.launch {
             viewModel.transactions.collect { transactions ->
                 _state.update { current ->
                     val updatedWallets = current.wallets.map { summary ->
-                        if (summary.address == address) {
+                        if (summary.walletId == walletId) {
                             summary.copy(transactions = transactions)
                         } else {
                             summary
@@ -1041,12 +1066,12 @@ class WalletKitViewModel @Inject constructor(
         viewModel.loadTransactions(limit = TRANSACTION_FETCH_LIMIT)
     }
 
-    private fun attachJettonsViewModel(address: String?) {
+    private fun attachJettonsViewModel(walletId: String?) {
         jettonsCollectors.forEach { it.cancel() }
         jettonsCollectors = emptyList()
-        if (address == null) {
+        if (walletId == null) {
             activeJettonsViewModel.value = null
-            currentJettonsWalletAddress = null
+            currentJettonsWalletId = null
             _state.update {
                 it.copy(
                     jettons = emptyList(),
@@ -1058,11 +1083,11 @@ class WalletKitViewModel @Inject constructor(
             return
         }
 
-        val wallet = lifecycleManager.tonWallets[address]
+        val wallet = lifecycleManager.tonWallets[walletId]
         if (wallet == null) {
-            Log.w(LOG_TAG, "attachJettonsViewModel: wallet not found for $address")
+            Log.w(LOG_TAG, "attachJettonsViewModel: wallet not found for $walletId")
             activeJettonsViewModel.value = null
-            currentJettonsWalletAddress = null
+            currentJettonsWalletId = null
             _state.update {
                 it.copy(
                     jettons = emptyList(),
@@ -1076,7 +1101,7 @@ class WalletKitViewModel @Inject constructor(
 
         val viewModel = JettonsListViewModel(wallet)
         activeJettonsViewModel.value = viewModel
-        currentJettonsWalletAddress = address
+        currentJettonsWalletId = walletId
 
         val dataJob = viewModelScope.launch {
             viewModel.jettons.collect { jettons ->
@@ -1128,10 +1153,10 @@ class WalletKitViewModel @Inject constructor(
         viewModel.loadJettons()
     }
 
-    fun refreshTransactions(address: String? = state.value.activeWalletAddress, limit: Int = TRANSACTION_FETCH_LIMIT) {
-        val targetAddress = address ?: return
-        if (currentTransactionsWalletAddress != targetAddress) {
-            attachTransactionHistoryViewModel(targetAddress)
+    fun refreshTransactions(walletId: String? = state.value.activeWalletId, limit: Int = TRANSACTION_FETCH_LIMIT) {
+        val targetWalletId = walletId ?: return
+        if (currentTransactionsWalletId != targetWalletId) {
+            attachTransactionHistoryViewModel(targetWalletId)
             return
         }
         activeTransactionHistoryViewModel.value?.loadTransactions(limit = limit)
@@ -1155,14 +1180,14 @@ class WalletKitViewModel @Inject constructor(
         uiCoordinator.showTransactionDetail(SheetState.TransactionDetail(detail))
     }
 
-    fun removeWallet(address: String) {
+    fun removeWallet(walletId: String) {
         viewModelScope.launch {
-            // SDK keys wallets by walletId; our cache maps address → ITONWallet.
-            val walletId = lifecycleManager.tonWallets[address]?.identifier()
-            if (walletId == null) {
+            val wallet = lifecycleManager.tonWallets[walletId]
+            if (wallet == null) {
                 _state.update { it.copy(error = uiString(R.string.wallet_error_wallet_not_found)) }
                 return@launch
             }
+            val address = wallet.address().value
 
             val kit = getKit()
             val removeResult = runCatching { kit.removeWallet(walletId) }
@@ -1181,9 +1206,8 @@ class WalletKitViewModel @Inject constructor(
             }
 
             // Remove from local cache
-            lifecycleManager.tonWallets.remove(address)
+            lifecycleManager.tonWallets.remove(walletId)
 
-            // Clear local storage entry
             runCatching { storage.clear(address) }
                 .onSuccess { Log.d(LOG_TAG, "removeWallet: cleared storage entry for $address") }
                 .onFailure { Log.w(LOG_TAG, "removeWallet: failed to clear storage for $address", it) }
@@ -1193,33 +1217,33 @@ class WalletKitViewModel @Inject constructor(
 
             lifecycleManager.walletMetadata.remove(address)
 
-            val walletName = state.value.wallets.firstOrNull { it.address == address }?.name
+            val walletName = state.value.wallets.firstOrNull { it.walletId == walletId }?.name
                 ?: uiString(R.string.wallet_default_name_fallback)
 
-            val previousActiveAddress = state.value.activeWalletAddress
-            var updatedActiveAddress: String? = null
+            val previousActiveId = state.value.activeWalletId
+            var updatedActiveId: String? = null
             _state.update {
-                val filteredWallets = it.wallets.filterNot { summary -> summary.address == address }
-                val newActiveAddress = when {
+                val filteredWallets = it.wallets.filterNot { summary -> summary.walletId == walletId }
+                val newActiveId = when {
                     filteredWallets.isEmpty() -> null
-                    it.activeWalletAddress == address -> filteredWallets.first().address
-                    else -> it.activeWalletAddress
+                    it.activeWalletId == walletId -> filteredWallets.first().walletId
+                    else -> it.activeWalletId
                 }
-                updatedActiveAddress = newActiveAddress
+                updatedActiveId = newActiveId
                 it.copy(
                     wallets = filteredWallets,
-                    activeWalletAddress = newActiveAddress,
+                    activeWalletId = newActiveId,
                     isWalletSwitcherExpanded = if (filteredWallets.size <= 1) false else it.isWalletSwitcherExpanded,
                 )
             }
 
-            if (previousActiveAddress != updatedActiveAddress) {
-                lifecycleManager.persistActiveWalletPreference(updatedActiveAddress)
+            if (previousActiveId != updatedActiveId) {
+                lifecycleManager.persistActiveWalletPreference(updatedActiveId)
             }
 
-            updateNftsViewModel(updatedActiveAddress)
-            attachTransactionHistoryViewModel(updatedActiveAddress)
-            attachJettonsViewModel(updatedActiveAddress)
+            updateNftsViewModel(updatedActiveId)
+            attachTransactionHistoryViewModel(updatedActiveId)
+            attachJettonsViewModel(updatedActiveId)
 
             refreshWallets()
             sessionsViewModel.refresh() // Refresh to update UI with removed sessions
@@ -1285,9 +1309,10 @@ class WalletKitViewModel @Inject constructor(
         _createWalletFlow.value = CreateWalletFlow.Idle
     }
 
-    fun renameWallet(address: String, newName: String) {
-        val metadata = lifecycleManager.walletMetadata[address]
-        if (metadata == null) {
+    fun renameWallet(walletId: String, newName: String) {
+        val address = addressForWalletId(walletId)
+        val metadata = address?.let { lifecycleManager.walletMetadata[it] }
+        if (address == null || metadata == null) {
             _state.update { it.copy(error = uiString(R.string.wallet_error_wallet_not_found)) }
             return
         }
@@ -1391,7 +1416,8 @@ class WalletKitViewModel @Inject constructor(
 
     private fun onTransactionRequest(request: TONWalletTransactionRequest) {
         Log.d(LOG_TAG, "=== onTransactionRequest called ===")
-        val walletAddress = state.value.activeWalletAddress ?: ""
+        val activeWallet = state.value.activeWalletId?.let { lifecycleManager.tonWallets[it] }
+        val walletAddress = activeWallet?.address()?.value ?: ""
         val dAppInfo = request.event.dAppInfo
         val fallbackDAppName = uiString(R.string.wallet_event_generic_dapp)
         val txRequest = request.event.request
@@ -1399,7 +1425,7 @@ class WalletKitViewModel @Inject constructor(
         Log.d(LOG_TAG, "Transaction request - walletAddress: $walletAddress, dAppName: ${dAppInfo?.name}")
 
         viewModelScope.launch {
-            val wallet = lifecycleManager.tonWallets[walletAddress]
+            val wallet = activeWallet
             if (wallet != null) {
                 try {
                     val balance = wallet.balance()
@@ -1452,7 +1478,7 @@ class WalletKitViewModel @Inject constructor(
         val event = request.event
         val dAppInfo = event.dAppInfo
         val fallbackDAppName = uiString(R.string.wallet_event_generic_dapp)
-        val walletAddress = event.walletAddress?.value ?: state.value.activeWalletAddress ?: ""
+        val walletAddress = event.walletAddress?.value ?: addressForWalletId(state.value.activeWalletId) ?: ""
 
         val messages = event.request.messages.map { msg ->
             TransactionMessageUi(
@@ -1490,7 +1516,7 @@ class WalletKitViewModel @Inject constructor(
 
         val uiRequest = SignDataRequestUi(
             id = request.hashCode().toString(),
-            walletAddress = request.event.walletAddress?.value ?: state.value.activeWalletAddress ?: "",
+            walletAddress = request.event.walletAddress?.value ?: addressForWalletId(state.value.activeWalletId) ?: "",
             dAppName = dAppInfo?.name,
             payloadType = payloadType,
             payloadContent = payloadContent,
@@ -1538,11 +1564,12 @@ class WalletKitViewModel @Inject constructor(
         }
     }
 
-    private fun syncStreamingObservers(address: String?) {
-        val network = resolveStreamingNetwork(address)
+    private fun syncStreamingObservers(walletId: String?) {
+        val network = resolveStreamingNetwork(walletId)
+        val address = addressForWalletId(walletId)
 
         if (
-            address == currentStreamingWalletAddress &&
+            walletId == currentStreamingWalletId &&
             network == currentStreamingNetwork &&
             streamingBalanceJob?.isActive == true &&
             streamingTransactionsJob?.isActive == true &&
@@ -1560,16 +1587,16 @@ class WalletKitViewModel @Inject constructor(
         streamingTransactionsJob = null
         streamingConnectionJob = null
         streamingJettonsJob = null
-        currentStreamingWalletAddress = address
+        currentStreamingWalletId = walletId
         currentStreamingNetwork = network
 
-        if (address == null || network == null) {
+        if (walletId == null || address == null || network == null) {
             Log.d(LOG_TAG, "STREAMING: observers stopped - no active wallet")
             _state.update { it.copy(isStreamingConnected = null) }
             return
         }
 
-        Log.d(LOG_TAG, "STREAMING: subscribing for wallet=$address network=${network.chainId}")
+        Log.d(LOG_TAG, "STREAMING: subscribing for wallet=$walletId address=$address network=${network.chainId}")
 
         streamingConnectionJob = viewModelScope.launch {
             try {
@@ -1607,7 +1634,7 @@ class WalletKitViewModel @Inject constructor(
                     _state.update { state ->
                         state.copy(
                             wallets = state.wallets.map { wallet ->
-                                if (wallet.address == address) {
+                                if (wallet.walletId == walletId) {
                                     wallet.copy(
                                         balanceNano = update.rawBalance,
                                         balance = TonFormatter.formatTon(update.rawBalance),
@@ -1632,7 +1659,7 @@ class WalletKitViewModel @Inject constructor(
                 val kit = getKit()
                 kit.streaming().transactions(network, address).collect { update ->
                     Log.d(LOG_TAG, "STREAMING: transactions updated count=${update.transactions.size}")
-                    refreshTransactions(address)
+                    refreshTransactions(walletId)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -1681,13 +1708,13 @@ class WalletKitViewModel @Inject constructor(
         }
     }
 
-    private fun resolveStreamingNetwork(address: String?): TONNetwork? {
-        if (address == null) {
+    private fun resolveStreamingNetwork(walletId: String?): TONNetwork? {
+        if (walletId == null) {
             return null
         }
 
-        return state.value.wallets.firstOrNull { it.address == address }?.network
-            ?: lifecycleManager.walletMetadata[address]?.network
+        return state.value.wallets.firstOrNull { it.walletId == walletId }?.network
+            ?: addressForWalletId(walletId)?.let { lifecycleManager.walletMetadata[it]?.network }
             ?: DEFAULT_NETWORK
     }
 
@@ -1859,13 +1886,13 @@ class WalletKitViewModel @Inject constructor(
      * Load jettons for the active wallet.
      */
     fun loadJettons() {
-        val address = state.value.activeWalletAddress
-        if (address == null) {
+        val walletId = state.value.activeWalletId
+        if (walletId == null) {
             Log.w(LOG_TAG, "loadJettons: No active wallet")
             return
         }
-        if (currentJettonsWalletAddress != address) {
-            attachJettonsViewModel(address)
+        if (currentJettonsWalletId != walletId) {
+            attachJettonsViewModel(walletId)
         } else {
             activeJettonsViewModel.value?.loadJettons()
         }

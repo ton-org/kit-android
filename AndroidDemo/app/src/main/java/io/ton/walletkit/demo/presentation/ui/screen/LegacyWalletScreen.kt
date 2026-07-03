@@ -159,7 +159,7 @@ fun LegacyWalletScreen(
         val session = if (browserSheet.injectTonConnect) injectedSession else plainSession
         if (session.tabs.isEmpty()) session.openTab(browserSheet.url)
     }
-    val activeWallet = state.wallets.firstOrNull { it.address == state.activeWalletAddress }
+    val activeWallet = state.wallets.firstOrNull { it.walletId == state.activeWalletId }
         ?: state.wallets.firstOrNull()
     if (showSheet) {
         ModalBottomSheet(
@@ -339,7 +339,7 @@ fun LegacyWalletScreen(
             if (state.wallets.size > 1) {
                 WalletSwitcher(
                     wallets = state.wallets,
-                    activeWalletAddress = state.activeWalletAddress,
+                    activeWalletId = state.activeWalletId,
                     isExpanded = state.isWalletSwitcherExpanded,
                     onToggle = actions::onToggleWalletSwitcher,
                     onSwitchWallet = actions::onSwitchWallet,
@@ -425,7 +425,7 @@ fun LegacyWalletScreen(
             activeWallet?.let { wallet ->
                 val nftDetails = NFTDetails.from(nft)
                 NFTDetailsScreen(
-                    walletAddress = wallet.address,
+                    walletId = wallet.walletId,
                     walletKit = walletKit,
                     nftDetails = nftDetails,
                     onClose = { selectedNFT = null },

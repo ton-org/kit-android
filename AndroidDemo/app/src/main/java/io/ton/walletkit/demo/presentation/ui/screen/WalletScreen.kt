@@ -269,7 +269,7 @@ fun WalletScreen(
         val session = if (browserSheet.injectTonConnect) injectedSession else plainSession
         if (session.tabs.isEmpty()) session.openTab(browserSheet.url)
     }
-    val activeWallet = state.wallets.firstOrNull { it.address == state.activeWalletAddress }
+    val activeWallet = state.wallets.firstOrNull { it.walletId == state.activeWalletId }
         ?: state.wallets.firstOrNull()
     if (showSheet) {
         ModalBottomSheet(
@@ -392,7 +392,7 @@ fun WalletScreen(
         )
     }
 
-    val activeIndex = state.wallets.indexOfFirst { it.address == state.activeWalletAddress }
+    val activeIndex = state.wallets.indexOfFirst { it.walletId == state.activeWalletId }
     val homeTitle = if (activeIndex >= 0) "Wallet ${activeIndex + 1}" else "Wallet"
     val homeAddress = activeWallet?.address.orEmpty()
     val nftsList by (nftsViewModel?.nfts?.collectAsState() ?: remember { mutableStateOf(emptyList<TONNFT>()) })
@@ -418,7 +418,7 @@ fun WalletScreen(
 
     // Reset the sub-screen on wallet switch so the user lands on home for the
     // new wallet (mirrors iOS NavigationStack popping on `.id(active.id)`).
-    LaunchedEffect(state.activeWalletAddress) {
+    LaunchedEffect(state.activeWalletId) {
         subScreen = HomeSubScreen.None
     }
     if (subScreen != HomeSubScreen.None) {
@@ -550,9 +550,9 @@ fun WalletScreen(
                 },
                 assets = assetItems,
                 nfts = nftPreviews,
-                onSend = { activeWallet?.let { actions.onSendFromWallet(it.address) } },
+                onSend = { activeWallet?.let { actions.onSendFromWallet(it.walletId) } },
                 onSwap = { actions.onSwapClick() },
-                onStake = { activeWallet?.let { actions.onStakeFromWallet(it.address) } },
+                onStake = { activeWallet?.let { actions.onStakeFromWallet(it.walletId) } },
                 onShowAllAssets = { subScreen = HomeSubScreen.AllAssets },
                 onShowAllNFTs = { subScreen = HomeSubScreen.AllNFTs },
                 onNFTTap = { preview ->
@@ -579,9 +579,9 @@ fun WalletScreen(
         ) {
             WalletsBottomSheet(
                 wallets = state.wallets,
-                activeWalletAddress = state.activeWalletAddress,
+                activeWalletId = state.activeWalletId,
                 onSelect = { wallet ->
-                    actions.onSwitchWallet(wallet.address)
+                    actions.onSwitchWallet(wallet.walletId)
                     showWalletsSheet = false
                 },
                 onCopyAddress = { address ->
@@ -594,7 +594,7 @@ fun WalletScreen(
                 },
                 onDelete = { wallet ->
                     showWalletsSheet = false
-                    actions.onRemoveWallet(wallet.address)
+                    actions.onRemoveWallet(wallet.walletId)
                 },
                 onClose = { showWalletsSheet = false },
             )
@@ -613,7 +613,7 @@ fun WalletScreen(
             activeWallet?.let { wallet ->
                 val nftDetails = NFTDetails.from(nft)
                 NFTDetailsScreen(
-                    walletAddress = wallet.address,
+                    walletId = wallet.walletId,
                     walletKit = walletKit,
                     nftDetails = nftDetails,
                     onClose = { selectedNFT = null },

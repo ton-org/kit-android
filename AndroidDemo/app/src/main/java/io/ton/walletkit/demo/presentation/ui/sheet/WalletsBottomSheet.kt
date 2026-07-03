@@ -55,7 +55,7 @@ import io.ton.walletkit.demo.presentation.model.WalletSummary
 @Composable
 fun WalletsBottomSheet(
     wallets: List<WalletSummary>,
-    activeWalletAddress: String?,
+    activeWalletId: String?,
     onSelect: (WalletSummary) -> Unit,
     onCopyAddress: (String) -> Unit,
     onAddWallet: () -> Unit,
@@ -105,7 +105,7 @@ fun WalletsBottomSheet(
                 WalletsBottomSheetRow(
                     title = walletTitle(wallet, index),
                     truncatedAddress = shortAddress(wallet.address),
-                    isActive = wallet.address == activeWalletAddress,
+                    isActive = wallet.walletId == activeWalletId,
                     onSelect = { onSelect(wallet) },
                     onCopyAddress = { onCopyAddress(wallet.address) },
                     onMore = { actionSheetWallet = wallet },

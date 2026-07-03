@@ -73,9 +73,9 @@ fun WalletsSection(
         } else {
             WalletCard(
                 wallet = activeWallet,
-                onDetails = { onWalletSelected(activeWallet.address) },
-                onSend = { onSendFromWallet(activeWallet.address) },
-                onStake = { onStakeFromWallet(activeWallet.address) },
+                onDetails = { onWalletSelected(activeWallet.walletId) },
+                onSend = { onSendFromWallet(activeWallet.walletId) },
+                onStake = { onStakeFromWallet(activeWallet.walletId) },
                 isStreamingConnected = isStreamingConnected,
                 onRefresh = onRefresh,
             )

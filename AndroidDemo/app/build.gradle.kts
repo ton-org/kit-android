@@ -179,6 +179,7 @@ dependencies {
     // Required transitive dependencies when using AAR:
     implementation(libs.androidxWebkit)
     implementation(libs.androidxDatastorePreferences)
+    implementation(libs.androidxTracing)
 
     implementation(libs.kotlinxSerializationJson)
 

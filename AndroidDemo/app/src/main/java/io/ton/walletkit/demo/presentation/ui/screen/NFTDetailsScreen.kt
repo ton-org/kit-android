@@ -77,7 +77,7 @@ import io.ton.walletkit.demo.presentation.viewmodel.NFTDetailsViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NFTDetailsScreen(
-    walletAddress: String,
+    walletId: String,
     walletKit: ITONWalletKit,
     nftDetails: NFTDetails,
     onClose: () -> Unit,
@@ -87,9 +87,9 @@ fun NFTDetailsScreen(
     var wallet by remember { mutableStateOf<ITONWallet?>(null) }
     var isLoadingWallet by remember { mutableStateOf(true) }
 
-    LaunchedEffect(walletAddress) {
+    LaunchedEffect(walletId) {
         isLoadingWallet = true
-        wallet = walletKit.getWallets().firstOrNull { it.address().value == walletAddress }
+        wallet = walletKit.getWallet(walletId)
         isLoadingWallet = false
     }
 
@@ -124,7 +124,7 @@ fun NFTDetailsScreen(
     }
 
     val viewModel: NFTDetailsViewModel = viewModel(
-        key = walletAddress + nftDetails.contractAddress,
+        key = walletId + nftDetails.contractAddress,
         factory = NFTDetailsViewModel.factory(wallet!!, nftDetails),
     )
 

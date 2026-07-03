@@ -200,6 +200,7 @@ dependencies {
     implementation(libs.kotlinxCoroutinesAndroid)
     implementation(libs.kotlinxSerializationJson)
     implementation(libs.androidxWebkit)
+    implementation(libs.androidxTracing)
 
     // Storage classes are now included in this module (merged from storage module)
     implementation(libs.androidxDatastorePreferences)

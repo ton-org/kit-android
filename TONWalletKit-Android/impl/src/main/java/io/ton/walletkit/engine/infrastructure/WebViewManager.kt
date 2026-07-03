@@ -35,6 +35,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.tracing.Trace
 import androidx.webkit.WebViewAssetLoader
 import io.ton.walletkit.WalletKitBridgeException
 import io.ton.walletkit.api.generated.TONDAppInfo
@@ -140,6 +141,7 @@ internal class WebViewManager(
     }
 
     private fun initializeWebView() {
+        Trace.beginSection(TRACE_INIT_WEBVIEW)
         try {
             Logger.d(TAG, "Initializing WebView on thread: ${Thread.currentThread().name}")
             webView = WebView(appContext)
@@ -250,6 +252,8 @@ internal class WebViewManager(
                 ),
                 null,
             )
+        } finally {
+            Trace.endSection()
         }
     }
 
@@ -290,14 +294,21 @@ internal class WebViewManager(
         }
 
         @JavascriptInterface
-        fun adapterCallSync(method: String, paramsJson: String): String = runBlocking {
+        fun adapterCallSync(method: String, paramsJson: String): String {
+            Trace.beginSection(TRACE_ADAPTER_CALL + method)
             try {
-                withTimeout(CALL_TIMEOUT_MS) {
-                    dispatch(method, json.parseToJsonElement(paramsJson).jsonObject)
+                return runBlocking {
+                    try {
+                        withTimeout(CALL_TIMEOUT_MS) {
+                            dispatch(method, json.parseToJsonElement(paramsJson).jsonObject)
+                        }
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "adapterCallSync($method) failed", e)
+                        throw e
+                    }
                 }
-            } catch (e: Exception) {
-                Logger.e(TAG, "adapterCallSync($method) failed", e)
-                throw e
+            } finally {
+                Trace.endSection()
             }
         }
 
@@ -564,6 +575,8 @@ internal class WebViewManager(
         private const val TAG = LogConstants.TAG_WEBVIEW_ENGINE
 
         private const val CALL_TIMEOUT_MS = 1000L
+        private const val TRACE_INIT_WEBVIEW = "WalletKit.initWebView"
+        private const val TRACE_ADAPTER_CALL = "WalletKit.adapterCall:"
         private const val MSG_FAILED_INITIALIZE_WEBVIEW = "Failed to initialize WebView"
         private const val MSG_FAILED_EVALUATE_JS_BRIDGE = "Failed to evaluate JS bridge readiness"
         private const val MSG_URL_SEPARATOR = " url="

@@ -21,6 +21,7 @@
  */
 package io.ton.walletkit.engine.infrastructure
 
+import androidx.tracing.Trace
 import io.ton.walletkit.WalletKitBridgeException
 import io.ton.walletkit.bridge.BridgeCodec
 import io.ton.walletkit.bridge.decodeFromBridge
@@ -41,6 +42,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 internal class BridgeRpcClient(
     private val webViewManager: WebViewManager,
@@ -50,6 +52,7 @@ internal class BridgeRpcClient(
 ) {
     private val pending = ConcurrentHashMap<String, CompletableDeferred<BridgeResponse>>()
     private val ready = CompletableDeferred<Unit>()
+    private val traceCookie = AtomicInteger(0)
 
     /**
      * Reverse-RPC channel: native callbacks JS can invoke by reference. Forward calls (Kotlin→JS,
@@ -77,18 +80,31 @@ internal class BridgeRpcClient(
         val deferred = CompletableDeferred<BridgeResponse>()
         pending[callId] = deferred
 
-        val envelope = buildJsonObject {
-            put(ResponseConstants.KEY_KIND, ResponseConstants.VALUE_KIND_CALL)
-            put(ResponseConstants.KEY_ID, callId)
-            put(ResponseConstants.KEY_METHOD, method)
-            val encoded = codec.encode(params)
-            if (encoded !is JsonNull) {
-                put(ResponseConstants.KEY_PARAMS, encoded)
+        val envelope: JsonObject
+        Trace.beginSection(TRACE_ENCODE + method)
+        try {
+            envelope = buildJsonObject {
+                put(ResponseConstants.KEY_KIND, ResponseConstants.VALUE_KIND_CALL)
+                put(ResponseConstants.KEY_ID, callId)
+                put(ResponseConstants.KEY_METHOD, method)
+                val encoded = codec.encode(params)
+                if (encoded !is JsonNull) {
+                    put(ResponseConstants.KEY_PARAMS, encoded)
+                }
             }
+        } finally {
+            Trace.endSection()
         }
 
-        webViewManager.transport.send(envelope.toString())
-        return deferred.await().raw
+        val rpcLabel = TRACE_RPC + method
+        val cookie = traceCookie.getAndIncrement()
+        Trace.beginAsyncSection(rpcLabel, cookie)
+        try {
+            webViewManager.transport.send(envelope.toString())
+            return deferred.await().raw
+        } finally {
+            Trace.endAsyncSection(rpcLabel, cookie)
+        }
     }
 
     fun handleResponse(id: String, response: JsonObject) {
@@ -141,6 +157,8 @@ internal class BridgeRpcClient(
         private const val TAG = LogConstants.TAG_WEBVIEW_ENGINE
         private const val ERROR_CALL_FAILED = "call["
         private const val ERROR_FAILED_SUFFIX = "] failed: "
+        private const val TRACE_RPC = "WalletKit.rpc:"
+        private const val TRACE_ENCODE = "WalletKit.encode:"
     }
 }
 

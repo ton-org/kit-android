@@ -103,9 +103,9 @@ class WalletUiStateCoordinator(
         state.update { it.copy(isWalletSwitcherExpanded = false) }
     }
 
-    fun setActiveWallet(address: String?) {
+    fun setActiveWallet(walletId: String?) {
         state.update {
-            it.copy(activeWalletAddress = address, isWalletSwitcherExpanded = false, error = null)
+            it.copy(activeWalletId = walletId, isWalletSwitcherExpanded = false, error = null)
         }
     }
 

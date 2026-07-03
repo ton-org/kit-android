@@ -54,21 +54,21 @@ class WalletActionsImpl @Inject constructor(
 
     override fun onDismissSheet() = viewModel.dismissSheet()
 
-    override fun onWalletDetails(address: String) = viewModel.showWalletDetails(address)
+    override fun onWalletDetails(walletId: String) = viewModel.showWalletDetails(walletId)
 
-    override fun onSendFromWallet(address: String) = viewModel.openSendTransactionSheet(address)
+    override fun onSendFromWallet(walletId: String) = viewModel.openSendTransactionSheet(walletId)
 
-    override fun onStakeFromWallet(address: String) = viewModel.openStakingSheet(address)
+    override fun onStakeFromWallet(walletId: String) = viewModel.openStakingSheet(walletId)
 
     override fun onDisconnectSession(sessionId: String) = viewModel.disconnectSession(sessionId)
 
     override fun onToggleWalletSwitcher() = viewModel.toggleWalletSwitcher()
 
-    override fun onSwitchWallet(address: String) = viewModel.switchWallet(address)
+    override fun onSwitchWallet(walletId: String) = viewModel.switchWallet(walletId)
 
-    override fun onRemoveWallet(address: String) = viewModel.removeWallet(address)
+    override fun onRemoveWallet(walletId: String) = viewModel.removeWallet(walletId)
 
-    override fun onRenameWallet(address: String, newName: String) = viewModel.renameWallet(address, newName)
+    override fun onRenameWallet(walletId: String, newName: String) = viewModel.renameWallet(walletId, newName)
 
     override fun onImportWallet(
         name: String,
@@ -106,7 +106,7 @@ class WalletActionsImpl @Inject constructor(
 
     override fun onCancelSignerApproval() = viewModel.cancelSignerApproval()
 
-    override fun onRefreshTransactions(address: String) = viewModel.refreshTransactions(address)
+    override fun onRefreshTransactions(walletId: String) = viewModel.refreshTransactions(walletId)
 
     override fun onTransactionClick(transactionHash: String, walletAddress: String) = viewModel.showTransactionDetail(transactionHash, walletAddress)
 

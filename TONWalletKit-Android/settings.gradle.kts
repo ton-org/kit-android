@@ -20,3 +20,4 @@ rootProject.name = "TONWalletKit-Android"
 
 include(":api")
 include(":impl")
+include(":microbenchmark")

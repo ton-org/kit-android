@@ -115,5 +115,5 @@ data class WalletRecord(
  * User preferences for the demo app.
  */
 data class UserPreferences(
-    val activeWalletAddress: String? = null,
+    val activeWalletId: String? = null,
 )

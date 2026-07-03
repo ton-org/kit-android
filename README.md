@@ -58,3 +58,26 @@ The script runs five steps:
 # Custom kit location
 KIT_DIR=/path/to/walletkit ./Scripts/rebuild-sdk.sh
 ```
+
+## Profiling & benchmarks
+
+Native performance tooling is in [Scripts/profiling/](Scripts/profiling/). The SDK is instrumented with `androidx.tracing` markers that show up as named slices in a trace: `WalletKit.rpc:*` (forward calls), `WalletKit.reverse:*` (signing), `WalletKit.adapterCall:*`, `WalletKit.initWebView`.
+
+Capture a Perfetto trace on a device and analyze it offline (no in-IDE profiler):
+
+```sh
+Scripts/profiling/capture-perfetto.sh io.ton.walletkit.demo 60   # exercise the app during the capture
+Scripts/profiling/analyze-trace.sh                               # per-method bridge cost, CPU/thread, UI jank
+```
+
+Or drag the `.pftrace` into https://ui.perfetto.dev. On an emulator the async `rpc` wall-clock is noise — trust the per-thread CPU and the `encode`/`reverse` slices. `record-simpleperf.sh` produces a sampled CPU flame graph.
+
+Per-method microbenchmarks for the deterministic value types (address/hex/base64/token math):
+
+```sh
+cd TONWalletKit-Android
+./gradlew :microbenchmark:connectedReleaseAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR,UNLOCKED,LOW-BATTERY
+```
+
+The `suppressErrors` flag is only needed on an emulator.

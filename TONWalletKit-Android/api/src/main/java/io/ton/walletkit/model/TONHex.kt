@@ -57,7 +57,11 @@ data class TONHex(
         get() = try {
             val hex = rawValue
             require(hex.length % 2 == 0) { "Hex string must have even length" }
-            hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            val out = ByteArray(hex.length / 2)
+            for (i in out.indices) {
+                out[i] = ((hexDigit(hex[i * 2]) shl 4) or hexDigit(hex[i * 2 + 1])).toByte()
+            }
+            out
         } catch (e: Exception) {
             null
         }
@@ -76,7 +80,13 @@ data class TONHex(
          * @param withPrefix Whether to include "0x" prefix (default: true)
          */
         fun fromData(data: ByteArray, withPrefix: Boolean = true): TONHex {
-            val hex = data.joinToString("") { "%02x".format(it) }
+            val chars = CharArray(data.size * 2)
+            for (i in data.indices) {
+                val byte = data[i].toInt() and 0xFF
+                chars[i * 2] = HEX_DIGITS[byte ushr 4]
+                chars[i * 2 + 1] = HEX_DIGITS[byte and 0x0F]
+            }
+            val hex = String(chars)
             return TONHex(if (withPrefix) "0x$hex" else hex)
         }
 
@@ -101,6 +111,15 @@ data class TONHex(
                 throw TONHexValidationException(value)
             }
             return hex
+        }
+
+        private val HEX_DIGITS = "0123456789abcdef".toCharArray()
+
+        private fun hexDigit(c: Char): Int = when (c) {
+            in '0'..'9' -> c - '0'
+            in 'a'..'f' -> c - 'a' + 10
+            in 'A'..'F' -> c - 'A' + 10
+            else -> throw NumberFormatException("Invalid hex character: $c")
         }
     }
 
